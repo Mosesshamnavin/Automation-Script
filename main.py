@@ -16,9 +16,9 @@ def main():
     # 2. Execute Step 1 (Playbison Extraction)
     print("\n--- STARTING STEP 1: PLAYBISON EXTRACTION ---")
     try:
-        subprocess.run([sys.executable, "automate.py"])
+        subprocess.run([sys.executable, "playbison_automation.py"])
     except Exception as e:
-        print(f"Error running automate.py: {e}")
+        print(f"Error running playbison_automation.py: {e}")
         return
         
     print("\n[MAIN] Playbison macro injected.")
@@ -47,9 +47,9 @@ def main():
     # 5. Execute Step 2 (Data Studio)
     print("\n--- STARTING STEP 2: DATA STUDIO ---")
     try:
-        subprocess.run([sys.executable, "datastudio.py", "--auto"])
+        subprocess.run([sys.executable, "datastudio_automation.py", "--auto"])
     except Exception as e:
-        print(f"Error running datastudio.py: {e}")
+        print(f"Error running datastudio_automation.py: {e}")
         
     print("\n[MAIN] Master automation workflow complete!")
 

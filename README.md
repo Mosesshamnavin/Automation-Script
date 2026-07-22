@@ -2,7 +2,16 @@
 
 This document outlines the step-by-step process for running the full Playbison and Data Studio automation.
 
-## Part 1: Playbison Data Extraction
+## Master Script (Full Automated Workflow)
+
+Run both steps automatically in sequence:
+```bash
+python main.py
+```
+
+---
+
+## Part 1: Playbison Data Extraction (`playbison_automation.py`)
 
 1. **Prepare your Browser:**
    - Open Google Chrome.
@@ -11,7 +20,7 @@ This document outlines the step-by-step process for running the full Playbison a
 
 2. **Start the Script:**
    - Open your terminal in VS Code (or command prompt).
-   - Run the command: `python automate.py`
+   - Run the command: `python playbison_automation.py`
    - Press **ENTER** when prompted.
 
 3. **Hands-Off Execution:**
@@ -28,11 +37,11 @@ This document outlines the step-by-step process for running the full Playbison a
 
 ---
 
-## Part 2: Google Data Studio Input
+## Part 2: Google Data Studio Input (`datastudio_automation.py`)
 
 1. **Start the Second Script:**
    - Go back to your terminal in VS Code.
-   - Run the command: `python datastudio.py`
+   - Run the command: `python datastudio_automation.py`
    - Press **ENTER** when prompted.
 
 2. **Hands-Off Execution:**
@@ -41,9 +50,9 @@ This document outlines the step-by-step process for running the full Playbison a
    - It will wait **15 seconds** for the heavy dashboard to fully load.
    - **Phase 1:** It will automatically click the `Bison BO` tab at the top.
    - **Phase 2:** It will locate the `Email (lowercase)` input box and automatically **paste** the email you copied.
-   - **Phase 3:** It will open the Date Picker calendar so we can filter the data by the last 2 months (this logic is currently being fine-tuned).
+   - **Phase 3:** It will open the Date Picker calendar so we can filter the data by the last 2 months.
 
 ## Troubleshooting
 
-- **"Could not find Go button" / "Could not find Player Status":** This usually happens if the page took too long to load or your Chrome window wasn't in focus. Just refresh the page and run `python automate.py` again.
+- **"Could not find Go button" / "Could not find Player Status":** This usually happens if the page took too long to load or your Chrome window wasn't in focus. Just refresh the page and run `python playbison_automation.py` again.
 - **Data Studio doesn't paste the email:** Ensure you actually pressed `Ctrl+C` when the prompt appeared in Part 1. Data Studio can also take a very long time to load; if your internet is slow, the 15-second timer might run out before the page is fully rendered.
