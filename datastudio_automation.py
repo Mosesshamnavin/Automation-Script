@@ -18,13 +18,13 @@ def main():
         input("\nPress ENTER to start...")
     else:
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
-        time.sleep(2)
+        time.sleep(1)
     
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
     webbrowser.open_new_tab(url)
     
-    print("\nWaiting 15 seconds for Data Studio to fully load...")
-    time.sleep(10)
+    print("\nWaiting 9 seconds for Data Studio to fully load...")
+    time.sleep(9)
     
     print("Executing Phase 1: Switching to Bison BO and focusing Email...")
     email_to_paste = pyperclip.paste().strip().lower()
@@ -41,7 +41,7 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    time.sleep(3) # Wait for javascript macro to finish clicking and focusing
+    time.sleep(2) # Wait for javascript macro to finish clicking and focusing
     
     print("Typing the email using simulated keystrokes...")
     pyautogui.hotkey('ctrl', 'a')
@@ -69,7 +69,7 @@ def main():
     pyautogui.press('enter')
     
     print("Waiting for Date Picker to open...")
-    time.sleep(2)
+    time.sleep(1)
     
     print("Executing Phase 3: Setting the Date Range (2 months ago -> today)...")
     # Macro 3: Navigate calendar back 1 month (to get 2 months ago), select days, click Apply
@@ -84,8 +84,8 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\nWaiting 7 seconds for Data Studio report table to update...")
-    time.sleep(7)
+    print("\nWaiting 6 seconds for Data Studio report table to update...")
+    time.sleep(6)
     
     print("Executing Phase 4: Checking W/D ratio (volumes)...")
     # Macro 4: Read W/D ratio (volumes) from Data Studio table using robust multi-tier search
@@ -155,8 +155,8 @@ def main():
             time.sleep(0.3)
             pyautogui.press('enter')
             
-            print("[PLAYBISON] Waiting 3 seconds for Payment Details modal to open...")
-            time.sleep(3.0)
+            print("[PLAYBISON] Waiting 2 seconds for Payment Details modal to open...")
+            time.sleep(2.0)
             
             # Step B: Extract maskedAccount + wallet_id from open modal
             # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
@@ -217,8 +217,8 @@ def main():
                 print(f"[PLAYBISON] 🚀 Opening wallet_id in new tab: {wallet_url}")
                 webbrowser.open_new_tab(wallet_url)
                 
-                print("[PLAYBISON] Waiting 8 seconds for wallet page to load to open notes...")
-                time.sleep(6.0)
+                print("[PLAYBISON] Waiting 7 seconds for wallet page to load to open notes...")
+                time.sleep(5.0)
                 
                 # We must manually type 'javascript:' because Chrome strips it when pasted
                 # We also use dispatchEvent because some single-page apps ignore a basic .click()
@@ -235,10 +235,10 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] 📝 Opened Notes tab.")
                 
-                print("[PLAYBISON] Waiting 7 seconds for notes data to load...")
-                time.sleep(7.0)
+                print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
+                time.sleep(6.0)
                 
-                js_trans_macro = "(function(){let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){tTab.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof tTab.click==='function')tTab.click();setTimeout(()=>{let selects=Array.from(document.querySelectorAll('select'));for(let select of selects){let targetOpt=Array.from(select.options).find(opt=>opt.textContent.trim().toLowerCase()==='redeem the bonuses');if(targetOpt){select.value=targetOpt.value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));let match=window.location.hash.match(/user:([a-f0-9]+)/);if(match){let wid=match[1];let inputs=Array.from(document.querySelectorAll('input'));let wInp=inputs.find(i=>i.value===wid);if(wInp){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(wInp,'');else wInp.value='';wInp.dispatchEvent(new Event('input',{bubbles:true}));wInp.dispatchEvent(new Event('change',{bubbles:true}));}}let allE=Array.from(document.querySelectorAll('*'));let dfLabel=allE.find(e=>e.children.length===0&&e.textContent.toLowerCase().includes('date from'));if(dfLabel){let idx=allE.indexOf(dfLabel);for(let i=idx+1;i<allE.length;i++){if(allE[i].tagName==='INPUT'){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allE[i],val);else allE[i].value=val;allE[i].dispatchEvent(new Event('input',{bubbles:true}));allE[i].dispatchEvent(new Event('change',{bubbles:true}));allE[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{let btns=Array.from(document.querySelectorAll('button, .btn'));let search=btns.find(b=>b.textContent.trim().toLowerCase()==='search');if(search)search.click();},500);break;}}},4000);}break;}}}})();"
+                js_trans_macro = "(function(){let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){tTab.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof tTab.click==='function')tTab.click();setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;let wLabel=all.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('wallet id'));if(wLabel){let idx=all.indexOf(wLabel);for(let i=idx;i<idx+10&&i<all.length;i++){if(all[i].tagName==='INPUT'){if(setter)setter.call(all[i],'');else all[i].value='';all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));break;}}}let selects=Array.from(document.querySelectorAll('select'));for(let select of selects){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonuses'));if(opt){select.value=opt.value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));break;}}let dLabel=all.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('date from'));if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx;i<idx+10&&i<all.length;i++){if(all[i].tagName==='INPUT'){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{let candidates=Array.from(document.querySelectorAll('button, input[type=\"button\"], input[type=\"submit\"], a, .btn'));let searchBtn=candidates.find(c=>{let txt=(c.textContent||c.value||'').toLowerCase().trim();return txt==='search';});if(searchBtn){searchBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));searchBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));searchBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof searchBtn.click==='function')searchBtn.click();}setTimeout(()=>{let tables=Array.from(document.querySelectorAll('table'));let resTable=tables.find(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));if(resTable){let firstRow=resTable.querySelector('thead tr');let ths=Array.from(firstRow.children);let noteColIdx=0;for(let th of ths){if(th.textContent.toLowerCase().trim()==='note')break;let span=parseInt(th.getAttribute('colspan')||'1',10);noteColIdx+=span;}let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=10);let allHaveAuto=dataRows.length>0&&dataRows.every(r=>{if(!r.children[noteColIdx])return false;return r.children[noteColIdx].textContent.toLowerCase().includes('automatic');});if(!allHaveAuto){for(let select of selects){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonuses'));if(opt){select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));break;}}let allElem=Array.from(document.querySelectorAll('*'));let amtLabel=allElem.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('amount range in (to)'));if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx;i<idx+10&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'){if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{let sBtn=candidates.find(c=>{let txt=(c.textContent||c.value||'').toLowerCase().trim();return txt==='search';});if(sBtn){sBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));sBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));sBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof sBtn.click==='function')sBtn.click();}},500);}}},4500);},600);},3500);}break;}}}})();"
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -247,7 +247,7 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
-                print("[PLAYBISON] 🔍 Checked notes. Switched to Transactions, cleared Wallet ID, filtered 'Redeem the bonuses', set Date From to 1 month ago & searched.")
+                print("[PLAYBISON] 🔍 Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
             else:
                 print("[PLAYBISON] ⚠️ Could not extract wallet_id from modal.")
                 print(f"\n[PLAYBISON] Result: {verify_raw}")

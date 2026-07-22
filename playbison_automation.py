@@ -48,9 +48,9 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\nWaiting 7 seconds for the 'Withdrawals To Confirm' page to fully load...")
+    print("\nWaiting 6 seconds for the 'Withdrawals To Confirm' page to fully load...")
     # Important: We let the Python script wait instead of Javascript, because page reloading destroys Javascript!
-    time.sleep(7)
+    time.sleep(6)
     
     print("Executing Phase 2: Filtering...")
     
@@ -66,8 +66,8 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\nWaiting 5 seconds for the table to filter...")
-    time.sleep(5)
+    print("\nWaiting 4 seconds for the table to filter...")
+    time.sleep(4)
     
     print("Executing Phase 3: Navigating to the last page...")
     
@@ -83,8 +83,8 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\nWaiting 7 seconds for the last page to load...")
-    time.sleep(7)
+    print("\nWaiting 6 seconds for the last page to load...")
+    time.sleep(6)
     
     print("Executing Phase 4: Auto-scanning backwards for non-VIP roles...")
     

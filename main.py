@@ -56,7 +56,7 @@ def main():
         
     # 4. Give the user 2 seconds to release the Enter key after closing the prompt
     print("\n[MAIN] Proceeding to Data Studio in 3 seconds. DO NOT TOUCH MOUSE/KEYBOARD!")
-    time.sleep(3)
+    time.sleep(2)
     
     # 5. Execute Step 2 (Data Studio)
     print("\n--- STARTING STEP 2: DATA STUDIO ---")
