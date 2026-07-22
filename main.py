@@ -22,7 +22,7 @@ def main():
         return
         
     print("\n[MAIN] Playbison macro injected.")
-    print("[MAIN] Waiting for the browser to find an empty role...")
+    print("[MAIN] Waiting for the browser to find a non-VIP role...")
     print("[MAIN] (Auto-Copy is enabled! It will automatically grab the email when found)")
     
     # 3. Wait for the clipboard to change (meaning the script found the email)
@@ -34,7 +34,21 @@ def main():
         clipboard_content = pyperclip.paste().strip()
         # If clipboard changed from our waiting flag, and looks like an email
         if clipboard_content != "WAITING_FOR_EMAIL" and "@" in clipboard_content:
-            print(f"\n[MAIN] Email automatically copied: {clipboard_content}")
+            if "|" in clipboard_content:
+                email, player_id = clipboard_content.split("|", 1)
+            else:
+                email, player_id = clipboard_content, ""
+            
+            print(f"\n[MAIN] Extracted Email: {email} | Player ID: {player_id}")
+            
+            # Save session data for Data Studio step
+            import json
+            with open("last_user.json", "w") as f:
+                json.dump({"email": email, "id": player_id}, f, indent=2)
+            
+            # Put clean email in clipboard for Data Studio search input
+            pyperclip.copy(email)
+            
             # Hit Enter to close the JS prompt
             pyautogui.press('enter')
             break
