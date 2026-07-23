@@ -5,16 +5,18 @@ import subprocess
 import sys
 
 def main():
-    print("============================================================")
-    print("   PLAYBISON TO DATA STUDIO - MASTER AUTOMATION SCRIPT")
-    print("============================================================")
-    print("This script will run all steps sequentially.")
+    import sys
     
+    if "--auto" not in sys.argv:
+        input("\nPress ENTER to start...")
+    else:
+        print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
+        time.sleep(1)
+
     # 1. Clear the clipboard so we know when the user copies the new email
     pyperclip.copy("WAITING_FOR_EMAIL")
     
     # 2. Execute Step 1 (Playbison Extraction)
-    print("\n--- STARTING STEP 1: PLAYBISON EXTRACTION ---")
     try:
         subprocess.run([sys.executable, "playbison_automation.py"])
     except Exception as e:

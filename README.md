@@ -1,65 +1,88 @@
 # Automation Workflow Guide
 
-This document outlines the step-by-step process for running the full Playbison and Data Studio automation.
+This document outlines the step-by-step process for running the full Playbison and Data Studio automation master script.
+
+---
 
 ## Master Script (Full Automated Workflow)
 
-Run both steps automatically in sequence:
+Run all steps automatically in sequence:
 ```bash
 python main.py
 ```
 
 ---
 
-## Part 1: Playbison Data Extraction (`playbison_automation.py`)
+## Complete Workflow Overview
 
-1. **Prepare your Browser:**
-   - Open Google Chrome.
-   - Navigate to the **Playbison Admin Dashboard**.
-   - Make sure you are on the `Withdrawals To Confirm` page.
-
-2. **Start the Script:**
-   - Open your terminal in VS Code (or command prompt).
-   - Run the command: `python playbison_automation.py`
-   - Press **ENTER** when prompted.
-
-3. **Hands-Off Execution:**
-   - You have **5 seconds** to click on your Chrome window to bring it to the front.
-   - **DO NOT touch your mouse or keyboard!** The script will now take over.
-   - **Phase 1 & 2:** It will automatically select `Verified` in the Player Status dropdown and click `Generate`.
-   - **Phase 3:** It will automatically read the total number of pages and jump straight to the last page.
-   - **Phase 4:** It will automatically scan the `roles` column. If the role field does not contain `VIP`, it selects that user. Otherwise, it clicks `<- Previous` and scans the next page.
-
-4. **Copy the Email:**
-   - Once it finds a non-VIP role, execution will pause and a browser popup will appear with the user's email already highlighted.
-   - Press `Ctrl + C` on your keyboard to copy the email.
-   - Press `Enter` (or click OK) to close the popup.
+### Part 1: Playbison Data Extraction (`playbison_automation.py`)
+1. **Prepare Browser:** Open Google Chrome and navigate to the **Playbison Admin Dashboard** (`Withdrawals To Confirm` page).
+2. **Start Script:** Run `python main.py` (or `python playbison_automation.py`).
+3. **Execution:**
+   - **Phase 1 & 2:** Automatically filters `Verified` in Player Status and generates the table.
+   - **Phase 3:** Jumps directly to the last page.
+   - **Phase 4:** Scans backwards for non-VIP roles (`roles` column does not contain `VIP`).
+   - Automatically extracts the matching player's email & Player ID and saves it to `last_user.json` (also copied to clipboard).
 
 ---
 
-## Part 2: Google Data Studio Input (`datastudio_automation.py`)
+### Part 2: Google Data Studio Input & W/D Ratio Check (`datastudio_automation.py`)
+1. Automatically opens Google Data Studio in a new Chrome tab.
+2. Focuses `Email (lowercase)` input field and types the extracted email.
+3. Sets the Date Picker filter to the last 2 months.
+4. Reads the **W/D ratio (volumes)** cell:
+   - If ratio is **>= 25%**: No action needed, workflow finishes.
+   - If ratio is **< 25%**: Proceed to Part 3 (Payment Details & Wallet Verification).
 
-1. **Start the Second Script:**
-   - Go back to your terminal in VS Code.
-   - Run the command: `python datastudio_automation.py`
-   - Press **ENTER** when prompted.
+---
 
-2. **Hands-Off Execution:**
-   - You have 5 seconds to click on your Chrome window to bring it to the front.
-   - The script will automatically open a new tab to your Google Data Studio report.
-   - It will wait **15 seconds** for the heavy dashboard to fully load.
-   - **Phase 1:** It will automatically click the `Bison BO` tab at the top.
-   - **Phase 2:** It will locate the `Email (lowercase)` input box and automatically **paste** the email you copied.
-   - **Phase 3:** It will open the Date Picker calendar and filter by the last 2 months.
-   - **Phase 4 (W/D Ratio Check & Modal Verification):** It inspects the `W/D ratio (volumes)` cell in Data Studio. If the ratio is **below 25%**, it automatically:
-     1. Switches your Chrome window back to the **Playbison Admin** tab (`Withdrawals To Confirm`).
-     2. Highlights the matching row on Playbison and **clicks the Player ID** to open the `Payments Details` modal.
-     3. Reads `first name` and `last name` from `Account details` and verifies they match the `request data` (handling Polish diacritics / accents).
-     4. If matched, extracts and **copies the full `maskedAccount` value** directly to your clipboard!
-     5. Automatically **opens the `wallet_id` link in a new tab** and switches Chrome focus to that page!
+### Part 3: Payment Details, Notes & Transactions Verification
+If W/D ratio is **< 25%**:
+
+1. **Payment Details Modal:**
+   - Returns to Playbison and clicks the matching Player ID to open the `Payments Details` modal.
+   - **Operator Rules:**
+     - **BANK WITHDRAWAL PIQ**: Validates first & last name against request data (handling accents/diacritics). If matched, copies `maskedAccount`.
+     - **PAYSAFECARD / SKRILL**: Skips name check (`accountHolder` is null) and copies email from `maskedAccount`.
+     - **COINSPAID**: Skips copy operation (`maskedAccount` and `accountHolder` are null).
+
+2. **Wallet Navigation & Notes Tab:**
+   - Extracts the `wallet_id` and opens `https://api-acnt.playbison.com/platform-admin/#action:admin.user:<wallet_id>` in a new tab.
+   - Waits for wallet profile to load, then automatically clicks the user profile **`notes`** tab (specifically the tab next to `edit personal data`).
+
+3. **Notes Inspection & Transactions Tab:**
+   - Waits for Notes table to load and inspects the **top row** of the Results table.
+   - If the `type` column contains **`normal`** or **`payment`**:
+     - Automatically clicks the user profile **`transactions`** tab (located next to `freespins`).
+
+4. **Transactions Filtering & Validation:**
+   - **Stage 1 (Initial Filter):**
+     - Clears the pre-populated `Wallet ID` field.
+     - Selects **`Redeem the bonuses`** in the `Type` dropdown.
+     - Computes the date **1 month ago** from today and sets `Date From` (`YYYY-MM-DD 00:00`).
+     - Clicks **`Search`**.
+   - **Stage 2 (Automatic Note Check & Fallback Search):**
+     - Waits for results to load and inspects the `note` column across all result rows (calculating true column index via header `colspan` attributes).
+     - **If EVERY row contains `"automatic"` in the note field:** Search complete! No further action taken.
+     - **If ANY row lacks `"automatic"` (or note is blank):**
+       - Resets `Type` dropdown to the blank option.
+       - Sets `Amount Range In (To)` to **`-8.01`**.
+       - Clicks **`Search`** again.
+
+---
+
+## File Structure
+
+- `main.py` - Master controller script that executes Part 1 and Part 2 in order.
+- `playbison_automation.py` - Handles Playbison withdrawal table filtering & non-VIP email extraction.
+- `datastudio_automation.py` - Handles Data Studio W/D ratio check, Playbison modal check, Wallet profile navigation, Notes inspection, and Transactions filtering.
+- `last_user.json` - Temporary data bridge used automatically between Part 1 and Part 2.
+- `.gitignore` - Ignores `__pycache__` and temporary system files.
+
+---
 
 ## Troubleshooting
 
-- **"Could not find Go button" / "Could not find Player Status":** This usually happens if the page took too long to load or your Chrome window wasn't in focus. Just refresh the page and run `python playbison_automation.py` again.
-- **Data Studio doesn't paste the email:** Data Studio can take time to load; ensure internet connection is stable.
-- **Modal Verification & Wallet Navigation:** If the name matches `request data`, the script copies `maskedAccount` to your clipboard and opens the `wallet_id` page in a new tab automatically.
+- **Chrome popup blocker:** All URL navigations are handled via native browser commands or address bar macros to bypass popup blockers.
+- **Chrome address bar security (`javascript:` prefix):** Macros type `javascript:` character-by-character to prevent Chrome from searching Google.
+- **React state updates:** Input fields (like Wallet ID, Date From, and Amount Range) use React-compatible native setters to guarantee state updates trigger properly.

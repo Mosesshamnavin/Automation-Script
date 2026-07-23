@@ -18,17 +18,6 @@ import pyautogui
 import pyperclip
 
 def main():
-    print("="*60)
-    print("NEW STRATEGY: Automated Multi-Stage Macro")
-    print("The python script will now handle the page loading for you!")
-    print("="*60)
-    print("\nINSTRUCTIONS:")
-    print("1. Be on the MAIN DASHBOARD of playbison.")
-    print("2. When you press ENTER here, you will have 5 SECONDS to click on your Chrome window to bring it to the front.")
-    print("3. DO NOT TOUCH YOUR MOUSE OR KEYBOARD until it is completely finished!")
-    print("\nPress ENTER to start...")
-    input()
-    
     print("\nSwitch to Chrome NOW! (You have 5 seconds...)")
     for i in range(5, 0, -1):
         print(f"{i}...")

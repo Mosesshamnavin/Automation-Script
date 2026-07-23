@@ -89,7 +89,7 @@ def main():
     
     print("Executing Phase 4: Checking W/D ratio (volumes)...")
     # Macro 4: Read W/D ratio (volumes) from Data Studio table using robust multi-tier search
-    js_macro_4 = "(function(){try{let allEls=Array.from(document.querySelectorAll('*'));let percentEls=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width===0||r.height===0||r.top<150)return false;let txt=e.textContent.trim();return/\\d+\\s*%/.test(txt);});if(percentEls.length>0){percentEls.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);prompt('WD_RATIO:',percentEls[0].textContent.trim());return;}let ratioHeader=allEls.find(e=>{let t=e.textContent.trim().toLowerCase();return(t.includes('w/d ratio')||t.includes('ratio (volumes)')||t.includes('ratio'))&&e.children.length===0&&e.getBoundingClientRect().width>0;});if(ratioHeader){let rHeader=ratioHeader.getBoundingClientRect();let headerMidX=rHeader.left+rHeader.width/2;let candidateCells=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width<=0||r.top<=rHeader.bottom)return false;return Math.abs((r.left+r.width/2)-headerMidX)<100;});candidateCells.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);if(candidateCells.length>0){prompt('WD_RATIO:',candidateCells[0].textContent.trim());return;}}prompt('WD_RATIO:','NO_DATA');}catch(e){prompt('WD_RATIO:','ERROR: '+e.message);}})();"
+    js_macro_4 = r"""(function(){try{let allEls=Array.from(document.querySelectorAll('*'));let isMulti=false;let emailHeader=allEls.find(e=>{let t=e.textContent.trim().toLowerCase();return t==='email'&&e.children.length===0&&e.getBoundingClientRect().width>0;});if(emailHeader){let rHeader=emailHeader.getBoundingClientRect();let headerMidX=rHeader.left+rHeader.width/2;let emailCells=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width<=0||r.top<=rHeader.bottom)return false;return Math.abs((r.left+r.width/2)-headerMidX)<100&&e.textContent.includes('@');});if(emailCells.length>1)isMulti=true;}if(isMulti){prompt('WD_RATIO:','MULTIBRAND');return;}let percentEls=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width===0||r.height===0||r.top<150)return false;let txt=e.textContent.trim();return/\d+\s*%/.test(txt);});if(percentEls.length>0){percentEls.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);prompt('WD_RATIO:',percentEls[0].textContent.trim());return;}let ratioHeader=allEls.find(e=>{let t=e.textContent.trim().toLowerCase();return(t.includes('w/d ratio')||t.includes('ratio (volumes)')||t.includes('ratio'))&&e.children.length===0&&e.getBoundingClientRect().width>0;});if(ratioHeader){let rHeader=ratioHeader.getBoundingClientRect();let headerMidX=rHeader.left+rHeader.width/2;let candidateCells=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width<=0||r.top<=rHeader.bottom)return false;return Math.abs((r.left+r.width/2)-headerMidX)<100;});candidateCells.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);if(candidateCells.length>0){prompt('WD_RATIO:',candidateCells[0].textContent.trim());return;}}prompt('WD_RATIO:','NO_DATA');}catch(e){prompt('WD_RATIO:','ERROR: '+e.message);}})();"""
 
     pyperclip.copy(js_macro_4)
     pyautogui.hotkey('ctrl', 'l')
@@ -109,6 +109,47 @@ def main():
     pyautogui.press('enter') # Close prompt
     
     print(f"\n[DATASTUDIO] Raw W/D ratio text: '{ratio_raw}'")
+
+    if ratio_raw == "MULTIBRAND":
+        print("[DATASTUDIO] Multibrand (2+ rows) detected. Selecting 'Bison Casino' in Brand filter...")
+        js_macro_brand = r"""(function(){try{function simClick(el){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}let allEls=Array.from(document.querySelectorAll('*'));let brandLabel=allEls.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='brand'&&e.getBoundingClientRect().width>0);if(!brandLabel){prompt('WD_FILTER:','BRAND_LABEL_NOT_FOUND');return;}simClick(brandLabel);setTimeout(()=>{let popupEls=Array.from(document.querySelectorAll('*'));let fireballOpt=popupEls.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='fireball'&&e.getBoundingClientRect().width>0);if(fireballOpt){let row=fireballOpt.closest('.row, [role="row"], [role="option"]')||fireballOpt.parentElement.parentElement;if(row){simClick(row);setTimeout(()=>{simClick(document.body);prompt('WD_FILTER:','SUCCESS');},500);}else{prompt('WD_FILTER:','ROW_NOT_FOUND');}}else{prompt('WD_FILTER:','FIREBALL_NOT_FOUND');}},1500);}catch(e){prompt('WD_FILTER:','ERROR: '+e.message);}})();"""
+        
+        pyperclip.copy(js_macro_brand)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.5)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.5)
+        pyautogui.press('enter')
+        
+        time.sleep(3.5)
+        pyautogui.hotkey('ctrl', 'c')
+        time.sleep(0.5)
+        filter_status = pyperclip.paste().strip()
+        pyautogui.press('enter')
+        print(f"[DATASTUDIO] Brand filter status: '{filter_status}'")
+        
+        if "SUCCESS" in filter_status:
+            print("[DATASTUDIO] Waiting 6 seconds for filtered data to load...")
+            time.sleep(6.0)
+            
+            print("[DATASTUDIO] Re-checking W/D ratio for Bison Casino...")
+            pyperclip.copy(js_macro_4)
+            pyautogui.hotkey('ctrl', 'l')
+            time.sleep(0.5)
+            pyautogui.write('javascript:')
+            time.sleep(0.2)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.5)
+            pyautogui.press('enter')
+            
+            time.sleep(1.5)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+            ratio_raw = pyperclip.paste().strip()
+            pyautogui.press('enter')
+            print(f"[DATASTUDIO] New Raw W/D ratio text: '{ratio_raw}'")
     
     # Read saved user ID & email if available
     import json, os, re
@@ -238,7 +279,7 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
                 time.sleep(6.0)
                 
-                js_trans_macro = "(function(){let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){tTab.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));tTab.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof tTab.click==='function')tTab.click();setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;let wLabel=all.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('wallet id'));if(wLabel){let idx=all.indexOf(wLabel);for(let i=idx;i<idx+10&&i<all.length;i++){if(all[i].tagName==='INPUT'){if(setter)setter.call(all[i],'');else all[i].value='';all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));break;}}}let selects=Array.from(document.querySelectorAll('select'));for(let select of selects){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonuses'));if(opt){select.value=opt.value;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));break;}}let dLabel=all.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('date from'));if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx;i<idx+10&&i<all.length;i++){if(all[i].tagName==='INPUT'){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{let candidates=Array.from(document.querySelectorAll('button, input[type=\"button\"], input[type=\"submit\"], a, .btn'));let searchBtn=candidates.find(c=>{let txt=(c.textContent||c.value||'').toLowerCase().trim();return txt==='search';});if(searchBtn){searchBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));searchBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));searchBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof searchBtn.click==='function')searchBtn.click();}setTimeout(()=>{let tables=Array.from(document.querySelectorAll('table'));let resTable=tables.find(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));if(resTable){let firstRow=resTable.querySelector('thead tr');let ths=Array.from(firstRow.children);let noteColIdx=0;for(let th of ths){if(th.textContent.toLowerCase().trim()==='note')break;let span=parseInt(th.getAttribute('colspan')||'1',10);noteColIdx+=span;}let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=10);let allHaveAuto=dataRows.length>0&&dataRows.every(r=>{if(!r.children[noteColIdx])return false;return r.children[noteColIdx].textContent.toLowerCase().includes('automatic');});if(!allHaveAuto){for(let select of selects){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonuses'));if(opt){select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));break;}}let allElem=Array.from(document.querySelectorAll('*'));let amtLabel=allElem.find(e=>e.children.length===0&&e.textContent.toLowerCase().trim().includes('amount range in (to)'));if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx;i<idx+10&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'){if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{let sBtn=candidates.find(c=>{let txt=(c.textContent||c.value||'').toLowerCase().trim();return txt==='search';});if(sBtn){sBtn.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));sBtn.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));sBtn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof sBtn.click==='function')sBtn.click();}},500);}}},4500);},600);},3500);}break;}}}})();"
+                js_trans_macro = r"""(function(){function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<4){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{doScopedSearch();},800);return;}}if(attempts<4){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},2000);}}let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}break;}}}})();"""
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -248,6 +289,69 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 print("[PLAYBISON] 🔍 Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
+                
+                print("[PLAYBISON] Waiting 10 seconds for transactions check to complete...")
+                time.sleep(10.0)
+                
+                js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doExactSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);}}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doExactSearch,800);}else{setTimeout(doExactSearch,800);}},3500);}})();"""
+                pyperclip.copy(js_payment_log_macro)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                print("[PLAYBISON] 💳 Switched to Payment Log, selected Pending/Completed, and clicked Search.")
+                
+                print("[PLAYBISON] Waiting 6 seconds for search results to load...")
+                time.sleep(6.0)
+                
+                # Clear clipboard to ensure we don't read old data
+                pyperclip.copy('')
+                
+                js_extract_id_macro = r"""(function(){let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0);if(pTab){let all=Array.from(document.querySelectorAll('*'));let ths=all.filter(e=>e.tagName==='TH'&&e.textContent.toLowerCase().trim()==='id'&&e.getBoundingClientRect().width>0);let idTh=ths.pop();if(idTh){let table=idTh.closest('table');if(table){let tbody=table.querySelector('tbody');if(tbody){let firstRow=tbody.querySelector('tr');if(firstRow){let firstCell=firstRow.querySelector('td');if(firstCell){let idText=firstCell.textContent.trim();let input=document.createElement('input');input.value=idText;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);}}}}}}})();"""
+                pyperclip.copy(js_extract_id_macro)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                
+                time.sleep(1.5)
+                extracted_id = pyperclip.paste().strip()
+                
+                if extracted_id and extracted_id.isdigit():
+                    print(f"[PLAYBISON] ✅ Extracted first ID: {extracted_id}")
+                    
+                    target_url = "https://backoffice.paymentiq.io/#/user-accounts"
+                    print(f"[PAYMENTIQ] 🚀 Opening {target_url} in a new tab...")
+                    pyperclip.copy(target_url)
+                    pyautogui.hotkey('ctrl', 't')
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    
+                    print("[PAYMENTIQ] Waiting 8 seconds for page to load...")
+                    time.sleep(8.0)
+                    
+                    js_piq_macro = r"""(function(){let query="user###ID###";let inputs=Array.from(document.querySelectorAll('input'));let visibleInputs=inputs.filter(i=>i.getBoundingClientRect().width>0&&i.type!=='hidden'&&i.type!=='checkbox'&&i.type!=='radio');let searchInput=visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase();let c=(i.className||'').toLowerCase();return p.includes('search')||p.includes('user')||c.includes('search');})||visibleInputs[0];if(searchInput){searchInput.focus();let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(searchInput,query);else searchInput.value=query;searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',keyCode:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',keyCode:13,bubbles:true}));let btn=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').toLowerCase().includes('search'));if(btn)btn.click();},500);}})();""".replace("###ID###", extracted_id)
+                    
+                    pyperclip.copy(js_piq_macro)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    print(f"[PAYMENTIQ] 🔍 Searched for user{extracted_id}")
+                    
+                else:
+                    print(f"[PLAYBISON] ⚠️ Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
             else:
                 print("[PLAYBISON] ⚠️ Could not extract wallet_id from modal.")
                 print(f"\n[PLAYBISON] Result: {verify_raw}")
