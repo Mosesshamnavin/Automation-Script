@@ -178,7 +178,7 @@ def main():
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
         if ratio_val < 25.0:
-            print(f"\n[DATASTUDIO] ⚠️ W/D ratio is {ratio_val}% (< 25%)!")
+            print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)!")
             print(f"[DATASTUDIO] Returning to Playbison table page and clicking ID for '{player_email or player_id}'...")
             
             # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
@@ -242,20 +242,20 @@ def main():
             is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
             
             if verify_raw == "COINSPAID_SKIP":
-                print(f"\n[PLAYBISON] ℹ️ Operator is COINSPAID. No copy required.")
+                print(f"\n[PLAYBISON] Operator is COINSPAID. No copy required.")
             elif is_error:
-                print(f"\n[PLAYBISON] ⚠️ Name mismatch or error: {verify_raw}")
+                print(f"\n[PLAYBISON] Name mismatch or error: {verify_raw}")
             elif verify_raw and not verify_raw.startswith("(function") and not verify_raw.startswith("WAITING"):
                 pyperclip.copy(verify_raw)
-                print(f"\n[PLAYBISON] ✅ Check passed!")
-                print(f"[PLAYBISON] 📋 Copied maskedAccount value to clipboard: '{verify_raw}'")
+                print(f"\n[PLAYBISON] Check passed!")
+                print(f"[PLAYBISON] Copied maskedAccount value to clipboard: '{verify_raw}'")
             else:
-                print(f"\n[PLAYBISON] ⚠️ Could not extract data from modal. Raw: {verify_raw}")
+                print(f"\n[PLAYBISON] Could not extract data from modal. Raw: {verify_raw}")
             
             # Open wallet_id in new tab regardless of match result
             if wallet_id:
                 wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
-                print(f"[PLAYBISON] 🚀 Opening wallet_id in new tab: {wallet_url}")
+                print(f"[PLAYBISON] Opening wallet_id in new tab: {wallet_url}")
                 webbrowser.open_new_tab(wallet_url)
                 
                 print("[PLAYBISON] Waiting 7 seconds for wallet page to load to open notes...")
@@ -274,7 +274,7 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
-                print("[PLAYBISON] 📝 Opened Notes tab.")
+                print("[PLAYBISON] Opened Notes tab.")
                 
                 print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
                 time.sleep(6.0)
@@ -288,7 +288,7 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
-                print("[PLAYBISON] 🔍 Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
+                print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
                 
                 print("[PLAYBISON] Waiting 10 seconds for transactions check to complete...")
                 time.sleep(10.0)
@@ -302,7 +302,7 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
-                print("[PLAYBISON] 💳 Switched to Payment Log, selected Pending/Completed, and clicked Search.")
+                print("[PLAYBISON] Switched to Payment Log, selected Pending/Completed, and clicked Search.")
                 
                 print("[PLAYBISON] Waiting 6 seconds for search results to load...")
                 time.sleep(6.0)
@@ -324,10 +324,10 @@ def main():
                 extracted_id = pyperclip.paste().strip()
                 
                 if extracted_id and extracted_id.isdigit():
-                    print(f"[PLAYBISON] ✅ Extracted first ID: {extracted_id}")
+                    print(f"[PLAYBISON] Extracted first ID: {extracted_id}")
                     
                     target_url = "https://backoffice.paymentiq.io/#/user-accounts"
-                    print(f"[PAYMENTIQ] 🚀 Opening {target_url} in a new tab...")
+                    print(f"[PAYMENTIQ] Opening {target_url} in a new tab...")
                     pyperclip.copy(target_url)
                     pyautogui.hotkey('ctrl', 't')
                     time.sleep(0.5)
@@ -348,19 +348,19 @@ def main():
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
                     pyautogui.press('enter')
-                    print(f"[PAYMENTIQ] 🔍 Searched for user{extracted_id}")
+                    print(f"[PAYMENTIQ] Searched for user{extracted_id}")
                     
                 else:
-                    print(f"[PLAYBISON] ⚠️ Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
+                    print(f"[PLAYBISON] Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
             else:
-                print("[PLAYBISON] ⚠️ Could not extract wallet_id from modal.")
+                print("[PLAYBISON] Could not extract wallet_id from modal.")
                 print(f"\n[PLAYBISON] Result: {verify_raw}")
         else:
             print(f"[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%). No action needed.")
     else:
         print("[DATASTUDIO] Could not determine W/D ratio automatically.")
         
-    print("\n✅ Script complete! Workflow finished.")
+    print("\n[MAIN] Script complete! Workflow finished.")
 
 if __name__ == "__main__":
     main()

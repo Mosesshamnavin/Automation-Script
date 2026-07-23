@@ -89,7 +89,7 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\n✅ Multi-Stage Macro executed successfully! Look at your browser.")
+    print("\n[PLAYBISON] Extraction macro executed successfully.")
 
 if __name__ == "__main__":
     main()
