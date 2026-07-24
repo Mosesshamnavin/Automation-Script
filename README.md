@@ -6,6 +6,7 @@ A hybrid Python + JavaScript automation suite designed to streamline manual user
 - **Cross-Domain Automation**: Seamlessly transfers context (Emails, IDs) across entirely different platforms without complex API integrations.
 - **Headless-Free Execution**: Operates directly inside your authenticated Chrome browser session, completely avoiding CAPTCHAs, 2FA prompts, and anti-bot systems that block standard headless browsers.
 - **Smart DOM Interactions**: Injects highly targeted JavaScript macros directly into the browser to handle dynamic React/Vue elements, complex shadow DOMs, and nested iframes instantly.
+- **Advanced Verification Checks**: Automatically flags duplicate accounts and detects credit card entries for immediate documentation.
 
 ## Getting Started
 
@@ -18,13 +19,15 @@ A hybrid Python + JavaScript automation suite designed to streamline manual user
 
 ## Documentation
 - **[View the Complete Workflow Documentation (WORKFLOW.md)](WORKFLOW.md)**: Detailed step-by-step breakdown of exactly what the script checks and validates at each stage.
+- **[View the Automation Diagram (workflow_diagram.md)](workflow_diagram.md)**: Visual flowchart of the entire script execution.
 
 ## File Structure
 - `main.py` - Master controller script that orchestrates the entire workflow.
 - `playbison_automation.py` - Handles Playbison withdrawal table filtering & extraction.
-- `datastudio_automation.py` - Handles Data Studio W/D ratio checks, Wallet profile navigation, Transaction validations, and PaymentIQ lookups.
+- `datastudio_automation.py` - Handles Duplicate Detection, Data Studio W/D checks, Wallet navigation, Transaction validations, and PaymentIQ lookups.
 - `last_user.json` - Temporary data bridge used automatically between components.
 - `WORKFLOW.md` - Detailed documentation of the business logic and rules.
+- `workflow_diagram.md` - Mermaid diagram mapping out the 5-phase execution flow.
 
 ## Architecture & Design Choice
 This project uses a **Python + JS Hybrid Approach** ("Poor Man's RPA"). 
