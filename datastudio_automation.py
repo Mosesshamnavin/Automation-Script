@@ -19,6 +19,174 @@ def main():
     else:
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
         time.sleep(1)
+
+    # Read saved user ID & email if available
+    import json, os, re
+    player_id = ""
+    player_email = ""
+    if os.path.exists("last_user.json"):
+        try:
+            with open("last_user.json", "r") as f:
+                data = json.load(f)
+                player_id = data.get("id", "")
+                player_email = data.get("email", "")
+        except Exception:
+            pass
+            
+    # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
+    pyautogui.hotkey('ctrl', '1')
+    time.sleep(1)
+    
+    js_open_modal = f"(function(){{let id='{player_id}';let email='{player_email}';window.location.hash='#action:admin.payment.details:'+id;let els=Array.from(document.querySelectorAll('*'));let target=els.find(e=>e.children.length===0&&(e.textContent.trim()===id||(email&&e.textContent.trim().toLowerCase()===email.toLowerCase())));if(target){{let clickEl=target.closest('a')||target;clickEl.click();clickEl.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));}}}})();"
+    
+    pyperclip.copy(js_open_modal)
+    pyautogui.hotkey('ctrl', 'l')
+    time.sleep(0.3)
+    pyautogui.write('javascript:')
+    time.sleep(0.2)
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(0.3)
+    pyautogui.press('enter')
+    
+    print("[PLAYBISON] Waiting 2 seconds for Payment Details modal to open...")
+    time.sleep(2.0)
+    
+    # Step B: Extract maskedAccount + wallet_id from open modal
+    # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
+    # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
+    # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
+    js_extract_macro = "(function(){try{function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function normStr(s){if(!s)return'';return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase().trim();}for(let doc of getFrames()){if(!doc||!doc.body)continue;let all=Array.from(doc.querySelectorAll('*'));function getVal(lbl){let l=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()===lbl.toLowerCase());if(!l)return'';if(l.tagName==='TD'&&l.nextElementSibling)return l.nextElementSibling.textContent.trim();let tr=l.closest('tr');if(tr&&tr.children.length>=2)return tr.children[1].textContent.trim();if(l.nextElementSibling)return l.nextElementSibling.textContent.trim();return'';}let op=getVal('Operator').toUpperCase();let fn=getVal('first name');let ln=getVal('last name');let wid=getVal('wallet_id');if(op.includes('COINSPAID')){prompt('RESULT:','COINSPAID_SKIP|WALLET:'+wid);return;}let reqHeader=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='request data');let reqStr='';if(reqHeader){let tr=reqHeader.closest('tr');if(tr&&tr.nextElementSibling){reqStr=tr.nextElementSibling.textContent.trim();}else if(reqHeader.closest('table')){let tbl=reqHeader.closest('table');let rows=Array.from(tbl.querySelectorAll('tbody tr, tr')).filter(r=>r!==reqHeader.closest('tr'));if(rows.length>0)reqStr=rows[0].textContent.trim();}}if(!reqStr){let JSONEl=all.find(e=>e.children.length===0&&(e.textContent.includes('maskedAccount')||e.textContent.includes('userId')||e.textContent.includes('accountHolder')));if(JSONEl)reqStr=JSONEl.textContent.trim();}if(reqStr){let match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']/i);if(!match)match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']?([^,}\r\n]+)/i);let acc=match?match[1].replace(/[\"']/g,'').trim():'';if(op.includes('PAYSAFECARD')||op.includes('SKRILL')){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}else{prompt('MISMATCH:','NAMEFAIL:maskedAccount not found|WALLET:'+wid);return;}}else{let fnNorm=normStr(fn);let lnNorm=normStr(ln);let reqNorm=normStr(reqStr);let fnMatch=!fnNorm||reqNorm.includes(fnNorm);let lnMatch=!lnNorm||reqNorm.includes(lnNorm);if(fnMatch&&lnMatch){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}else{prompt('RESULT:',reqStr+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}}else{prompt('MISMATCH:','NAMEFAIL:'+fn+' '+ln+'|WALLET:'+wid);return;}}}}prompt('ERROR:','NOTFOUND|WALLET:');}catch(e){prompt('ERROR:','NOTFOUND|WALLET:');}})();"
+    
+    pyperclip.copy("WAITING_FOR_PROMPT")
+    pyperclip.copy(js_extract_macro)
+    pyautogui.hotkey('ctrl', 'l')
+    time.sleep(0.3)
+    pyautogui.write('javascript:')
+    time.sleep(0.2)
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(0.3)
+    pyautogui.press('enter')
+    
+    verify_raw = ""
+    for _ in range(6):
+        time.sleep(0.8)
+        pyautogui.hotkey('ctrl', 'c')
+        time.sleep(0.3)
+        clip_val = pyperclip.paste().strip()
+        if clip_val and clip_val != "WAITING_FOR_PROMPT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
+            verify_raw = clip_val
+            pyautogui.press('enter')
+            break
+    else:
+        pyautogui.press('enter')
+    
+    # Chrome prompt() Ctrl+C copies the INPUT FIELD value only, not the label.
+    # Format: "maskedAccount_value|WALLET:hexId"  or  "NAMEFAIL:first last|WALLET:hexId"
+    
+    # Extract wallet_id from response
+    wallet_id = ""
+    if "|WALLET:" in verify_raw:
+        parts = verify_raw.split("|WALLET:")
+        verify_raw = parts[0].strip()
+        wallet_id_and_rest = parts[1].strip()
+        
+        # Now split wallet_id from the rest
+        if "|FN:" in wallet_id_and_rest:
+            wid_parts = wallet_id_and_rest.split("|FN:")
+            wallet_id = wid_parts[0].strip()
+            rest = wid_parts[1]
+        else:
+            wallet_id = wallet_id_and_rest
+            rest = ""
+    else:
+        rest = ""
+
+    # Extract fn, ln, city
+    fn = ""
+    ln = ""
+    city = ""
+    if rest:
+        if "|LN:" in rest:
+            fn, rest = rest.split("|LN:")
+            fn = fn.strip()
+            if "|CITY:" in rest:
+                ln, city = rest.split("|CITY:")
+                ln = ln.strip()
+                city = city.strip()
+                
+    if fn and ln:
+        print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
+        webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
+        time.sleep(6.0)
+        
+        js_check_dup = f"""(function(){{
+            function simClick(el){{if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{{bubbles:true}}));el.dispatchEvent(new MouseEvent('mouseup',{{bubbles:true}}));el.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));}}
+            let fn='{fn}'; let ln='{ln}'; let city='{city}';
+            let inputs = Array.from(document.querySelectorAll('input'));
+            let fnInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by firstname'));
+            let lnInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by lastname'));
+            
+            if(fnInput) {{ let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; if(s)s.call(fnInput, fn); else fnInput.value=fn; fnInput.dispatchEvent(new Event('input',{{bubbles:true}})); }}
+            if(lnInput) {{ let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; if(s)s.call(lnInput, ln); else lnInput.value=ln; lnInput.dispatchEvent(new Event('input',{{bubbles:true}})); }}
+            
+            let searchBtns=Array.from(document.querySelectorAll('button, a')).filter(b=>b.textContent.trim().toLowerCase()==='search'&&b.getBoundingClientRect().width>0);
+            if(searchBtns.length>0) simClick(searchBtns[0]);
+            
+            setTimeout(()=>{{
+                let trs=Array.from(document.querySelectorAll('tbody tr')).filter(r=>r.children.length>3); 
+                if(trs.length>1){{ 
+                    let cityInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by city'));
+                    if(cityInput && city){{ 
+                        let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; 
+                        if(s)s.call(cityInput, city); else cityInput.value=city; 
+                        cityInput.dispatchEvent(new Event('input',{{bubbles:true}})); 
+                        let clrBtns=Array.from(document.querySelectorAll('button, a')).filter(b=>b.textContent.trim().toLowerCase()==='search'&&b.getBoundingClientRect().width>0);
+                        if(clrBtns.length>0) simClick(clrBtns[0]); 
+                        setTimeout(()=>{{
+                            let trs2=Array.from(document.querySelectorAll('tbody tr')).filter(r=>r.children.length>3); 
+                            if(trs2.length>1){{prompt('DUPLICATE','YES');}}else{{prompt('DUPLICATE','NO');}}
+                        }}, 4000); 
+                    }} else {{ prompt('DUPLICATE','YES'); }}
+                }}else{{ prompt('DUPLICATE','NO'); }} 
+            }}, 4000);
+        }})();"""
+        
+        pyperclip.copy("WAITING_FOR_DUP")
+        pyperclip.copy(js_check_dup)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        dup_res = ""
+        for _ in range(12):
+            time.sleep(1.0)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.3)
+            clip_val = pyperclip.paste().strip()
+            if clip_val and clip_val != "WAITING_FOR_DUP" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
+                dup_res = clip_val
+                pyautogui.press('enter')
+                break
+        else:
+            pyautogui.press('enter')
+            
+        if dup_res == "YES":
+            print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS FOUND FOR {fn} {ln} {city}!!!\n{'='*60}\n")
+        else:
+            print(f"[PLAYBISON] No duplicate accounts found for {fn} {ln}.")
+    
+    # Detect name mismatch errors
+    is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
+    
+    if verify_raw == "COINSPAID_SKIP":
+        print(f"\n[PLAYBISON] Operator is COINSPAID. No copy required.")
+    elif is_error:
+        print(f"\n[PLAYBISON] Name mismatch or error: {verify_raw}")
+
     
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
     webbrowser.open_new_tab(url)
@@ -27,7 +195,7 @@ def main():
     time.sleep(9)
     
     print("Executing Phase 1: Switching to Bison BO and focusing Email...")
-    email_to_paste = pyperclip.paste().strip().lower()
+    email_to_paste = player_email.strip().lower() if player_email else pyperclip.paste().strip().lower()
     
     # Macro 1: Switch to Bison BO and focus the precise <input> box
     js_macro_1 = "(function(){try{function simClick(el){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));el.dispatchEvent(new MouseEvent('click',{bubbles:true}));}let els=Array.from(document.querySelectorAll('*'));let bison=els.find(e=>e.children.length===0&&e.textContent.trim()==='Bison BO'&&e.getBoundingClientRect().width>0);if(bison){simClick(bison);setTimeout(()=>{let els2=Array.from(document.querySelectorAll('*'));let emailLabel=els2.find(e=>e.children.length===0&&e.textContent.trim()==='Email (lowercase)'&&e.getBoundingClientRect().width>0);if(emailLabel){let r=emailLabel.getBoundingClientRect();let inputs=Array.from(document.querySelectorAll('input'));let target=null;let minDist=Infinity;for(let inp of inputs){let ir=inp.getBoundingClientRect();if(ir.width>0&&ir.top>=r.bottom){let dx=(ir.left+ir.width/2)-(r.left+r.width/2);let dy=ir.top-r.bottom;let d=dx*dx+dy*dy;if(d<minDist){minDist=d;target=inp;}}}if(target){target.focus();if(target.style)target.style.border='3px solid blue';simClick(target);}else{alert('Could not find the email input box!');}}},1500);}}catch(e){alert('Macro 1 Error: '+e.message);}})();"
@@ -151,19 +319,6 @@ def main():
             pyautogui.press('enter')
             print(f"[DATASTUDIO] New Raw W/D ratio text: '{ratio_raw}'")
     
-    # Read saved user ID & email if available
-    import json, os, re
-    player_id = ""
-    player_email = ""
-    if os.path.exists("last_user.json"):
-        try:
-            with open("last_user.json", "r") as f:
-                data = json.load(f)
-                player_id = data.get("id", "")
-                player_email = data.get("email", "")
-        except Exception:
-            pass
-            
     # Parse ratio float
     ratio_val = None
     if ratio_raw and "HEADER_NOT_FOUND" not in ratio_raw and "NO_DATA" not in ratio_raw:
@@ -182,78 +337,7 @@ def main():
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)!")
             else:
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%). Proceeding to Playbison for manual cancellation check!")
-            print(f"[DATASTUDIO] Returning to Playbison table page and clicking ID for '{player_email or player_id}'...")
-            
-            # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
-            pyautogui.hotkey('ctrl', '1')
-            time.sleep(1)
-            
-            js_open_modal = f"(function(){{let id='{player_id}';let email='{player_email}';window.location.hash='#action:admin.payment.details:'+id;let els=Array.from(document.querySelectorAll('*'));let target=els.find(e=>e.children.length===0&&(e.textContent.trim()===id||(email&&e.textContent.trim().toLowerCase()===email.toLowerCase())));if(target){{let clickEl=target.closest('a')||target;clickEl.click();clickEl.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));}}}})();"
-            
-            pyperclip.copy(js_open_modal)
-            pyautogui.hotkey('ctrl', 'l')
-            time.sleep(0.3)
-            pyautogui.write('javascript:')
-            time.sleep(0.2)
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.3)
-            pyautogui.press('enter')
-            
-            print("[PLAYBISON] Waiting 2 seconds for Payment Details modal to open...")
-            time.sleep(2.0)
-            
-            # Step B: Extract maskedAccount + wallet_id from open modal
-            # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
-            # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
-            # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
-            js_extract_macro = "(function(){try{function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function normStr(s){if(!s)return'';return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase().trim();}for(let doc of getFrames()){if(!doc||!doc.body)continue;let all=Array.from(doc.querySelectorAll('*'));function getVal(lbl){let l=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()===lbl.toLowerCase());if(!l)return'';if(l.tagName==='TD'&&l.nextElementSibling)return l.nextElementSibling.textContent.trim();let tr=l.closest('tr');if(tr&&tr.children.length>=2)return tr.children[1].textContent.trim();if(l.nextElementSibling)return l.nextElementSibling.textContent.trim();return'';}let op=getVal('Operator').toUpperCase();let fn=getVal('first name');let ln=getVal('last name');let wid=getVal('wallet_id');if(op.includes('COINSPAID')){prompt('RESULT:','COINSPAID_SKIP|WALLET:'+wid);return;}let reqHeader=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='request data');let reqStr='';if(reqHeader){let tr=reqHeader.closest('tr');if(tr&&tr.nextElementSibling){reqStr=tr.nextElementSibling.textContent.trim();}else if(reqHeader.closest('table')){let tbl=reqHeader.closest('table');let rows=Array.from(tbl.querySelectorAll('tbody tr, tr')).filter(r=>r!==reqHeader.closest('tr'));if(rows.length>0)reqStr=rows[0].textContent.trim();}}if(!reqStr){let JSONEl=all.find(e=>e.children.length===0&&(e.textContent.includes('maskedAccount')||e.textContent.includes('userId')||e.textContent.includes('accountHolder')));if(JSONEl)reqStr=JSONEl.textContent.trim();}if(reqStr){let match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']/i);if(!match)match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']?([^,}\r\n]+)/i);let acc=match?match[1].replace(/[\"']/g,'').trim():'';if(op.includes('PAYSAFECARD')||op.includes('SKRILL')){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid);return;}else{prompt('MISMATCH:','NAMEFAIL:maskedAccount not found|WALLET:'+wid);return;}}else{let fnNorm=normStr(fn);let lnNorm=normStr(ln);let reqNorm=normStr(reqStr);let fnMatch=!fnNorm||reqNorm.includes(fnNorm);let lnMatch=!lnNorm||reqNorm.includes(lnNorm);if(fnMatch&&lnMatch){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid);return;}else{prompt('RESULT:',reqStr+'|WALLET:'+wid);return;}}else{prompt('MISMATCH:','NAMEFAIL:'+fn+' '+ln+'|WALLET:'+wid);return;}}}}prompt('ERROR:','NOTFOUND|WALLET:');}catch(e){prompt('ERROR:','NOTFOUND|WALLET:');}})();"
-            
-            pyperclip.copy("WAITING_FOR_PROMPT")
-            pyperclip.copy(js_extract_macro)
-            pyautogui.hotkey('ctrl', 'l')
-            time.sleep(0.3)
-            pyautogui.write('javascript:')
-            time.sleep(0.2)
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.3)
-            pyautogui.press('enter')
-            
-            verify_raw = ""
-            for _ in range(6):
-                time.sleep(0.8)
-                pyautogui.hotkey('ctrl', 'c')
-                time.sleep(0.3)
-                clip_val = pyperclip.paste().strip()
-                if clip_val and clip_val != "WAITING_FOR_PROMPT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
-                    verify_raw = clip_val
-                    pyautogui.press('enter')
-                    break
-            else:
-                pyautogui.press('enter')
-            
-            # Chrome prompt() Ctrl+C copies the INPUT FIELD value only, not the label.
-            # Format: "maskedAccount_value|WALLET:hexId"  or  "NAMEFAIL:first last|WALLET:hexId"
-            
-            # Extract wallet_id from response
-            wallet_id = ""
-            if "|WALLET:" in verify_raw:
-                parts = verify_raw.split("|WALLET:")
-                verify_raw = parts[0].strip()
-                wallet_id = parts[1].strip()
-            
-            # Detect name mismatch errors
-            is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
-            
-            if verify_raw == "COINSPAID_SKIP":
-                print(f"\n[PLAYBISON] Operator is COINSPAID. No copy required.")
-            elif is_error:
-                print(f"\n[PLAYBISON] Name mismatch or error: {verify_raw}")
-            elif verify_raw and not verify_raw.startswith("(function") and not verify_raw.startswith("WAITING"):
-                pyperclip.copy(verify_raw)
-                print(f"\n[PLAYBISON] Check passed!")
-                print(f"[PLAYBISON] Copied maskedAccount value to clipboard: '{verify_raw}'")
-            else:
-                print(f"\n[PLAYBISON] Could not extract data from modal. Raw: {verify_raw}")
+            print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
             if wallet_id:
