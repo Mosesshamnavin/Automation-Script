@@ -177,8 +177,11 @@ def main():
 
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
-        if ratio_val < 25.0:
-            print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)!")
+        if True: # Proceed regardless of ratio
+            if ratio_val < 25.0:
+                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)!")
+            else:
+                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%). Proceeding to Playbison for manual cancellation check!")
             print(f"[DATASTUDIO] Returning to Playbison table page and clicking ID for '{player_email or player_id}'...")
             
             # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
@@ -307,24 +310,11 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for search results to load...")
                 time.sleep(6.0)
                 
-                # Clear clipboard to ensure we don't read old data
-                pyperclip.copy('')
-                
-                js_extract_id_macro = r"""(function(){let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0);if(pTab){let all=Array.from(document.querySelectorAll('*'));let ths=all.filter(e=>e.tagName==='TH'&&e.textContent.toLowerCase().trim()==='id'&&e.getBoundingClientRect().width>0);let idTh=ths.pop();if(idTh){let table=idTh.closest('table');if(table){let tbody=table.querySelector('tbody');if(tbody){let firstRow=tbody.querySelector('tr');if(firstRow){let firstCell=firstRow.querySelector('td');if(firstCell){let idText=firstCell.textContent.trim();let input=document.createElement('input');input.value=idText;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);}}}}}}})();"""
-                pyperclip.copy(js_extract_id_macro)
-                pyautogui.hotkey('ctrl', 'l')
-                time.sleep(0.3)
-                pyautogui.write('javascript:')
-                time.sleep(0.2)
-                pyautogui.hotkey('ctrl', 'v')
-                time.sleep(0.3)
-                pyautogui.press('enter')
-                
-                time.sleep(1.5)
-                extracted_id = pyperclip.paste().strip()
+                # Use the player_id extracted from the previous step
+                extracted_id = player_id
                 
                 if extracted_id and extracted_id.isdigit():
-                    print(f"[PLAYBISON] Extracted first ID: {extracted_id}")
+                    print(f"[PLAYBISON] Using Player ID for PaymentIQ search: {extracted_id}")
                     
                     target_url = "https://backoffice.paymentiq.io/#/user-accounts"
                     print(f"[PAYMENTIQ] Opening {target_url} in a new tab...")
@@ -338,7 +328,7 @@ def main():
                     print("[PAYMENTIQ] Waiting 8 seconds for page to load...")
                     time.sleep(8.0)
                     
-                    js_piq_macro = r"""(function(){let query="user###ID###";let inputs=Array.from(document.querySelectorAll('input'));let visibleInputs=inputs.filter(i=>i.getBoundingClientRect().width>0&&i.type!=='hidden'&&i.type!=='checkbox'&&i.type!=='radio');let searchInput=visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase();let c=(i.className||'').toLowerCase();return p.includes('search')||p.includes('user')||c.includes('search');})||visibleInputs[0];if(searchInput){searchInput.focus();let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(searchInput,query);else searchInput.value=query;searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',keyCode:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',keyCode:13,bubbles:true}));let btn=Array.from(document.querySelectorAll('button')).find(b=>(b.textContent||'').toLowerCase().includes('search'));if(btn)btn.click();},500);}})();""".replace("###ID###", extracted_id)
+                    js_piq_macro = r"""(function(){let query="user###ID###";let inputs=Array.from(document.querySelectorAll('input'));let visibleInputs=inputs.filter(i=>i.getBoundingClientRect().width>0&&i.type!=='hidden'&&i.type!=='checkbox'&&i.type!=='radio');let searchInput=visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p==='search...';})||visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p.includes('search');})||visibleInputs[0];if(searchInput){searchInput.focus();let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(searchInput,query);else searchInput.value=query;searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));},500);}})();""".replace("###ID###", extracted_id)
                     
                     pyperclip.copy(js_piq_macro)
                     pyautogui.hotkey('ctrl', 'l')
@@ -355,8 +345,7 @@ def main():
             else:
                 print("[PLAYBISON] Could not extract wallet_id from modal.")
                 print(f"\n[PLAYBISON] Result: {verify_raw}")
-        else:
-            print(f"[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%). No action needed.")
+        # 'else' block for ratio >= 25% removed because we now proceed for all ratios
     else:
         print("[DATASTUDIO] Could not determine W/D ratio automatically.")
         
