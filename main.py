@@ -41,7 +41,7 @@ def main():
             else:
                 email, player_id = clipboard_content, ""
             
-            print(f"\n[MAIN] Extracted Email: {email} | Player ID: {player_id}")
+            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id}")
             
             # Save session data for Data Studio step
             import json

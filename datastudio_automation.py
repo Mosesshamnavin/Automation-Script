@@ -264,6 +264,35 @@ def main():
                 print("[PLAYBISON] Waiting 7 seconds for wallet page to load to open notes...")
                 time.sleep(5.0)
                 
+                # Extract the correct Player ID and Name from the wallet page
+                js_extract_player_id = r"""(function(){let txt=document.body.innerText;let match=txt.match(/\(id:\s*(\d+)/i);let id=match?match[1]:'';let all=Array.from(document.querySelectorAll('td'));let nameLabel=all.find(td=>td.textContent.trim().toLowerCase()==='name');let name='';if(nameLabel&&nameLabel.nextElementSibling){name=nameLabel.nextElementSibling.textContent.trim();}let res=id+'|NAME:'+name;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                pyperclip.copy('')
+                pyperclip.copy(js_extract_player_id)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                
+                time.sleep(1.0)
+                clipboard_res = pyperclip.paste().strip()
+                true_player_name = ""
+                if "|NAME:" in clipboard_res:
+                    parts = clipboard_res.split("|NAME:")
+                    true_player_id = parts[0].strip()
+                    true_player_name = parts[1].strip()
+                else:
+                    true_player_id = clipboard_res
+                    
+                if true_player_id and true_player_id.isdigit():
+                    print(f"[PLAYBISON] Extracted true Player ID from wallet page: {true_player_id} (Name: {true_player_name})")
+                else:
+                    print(f"[PLAYBISON] Warning: Could not extract true Player ID. Falling back to transaction ID.")
+                    true_player_id = player_id
+
+                
                 # We must manually type 'javascript:' because Chrome strips it when pasted
                 # We also use dispatchEvent because some single-page apps ignore a basic .click()
                 # To avoid clicking the global "Notes" menu, we specifically look for the "notes" tab 
@@ -282,7 +311,7 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
                 time.sleep(6.0)
                 
-                js_trans_macro = r"""(function(){function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<4){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{doScopedSearch();},800);return;}}if(attempts<4){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},2000);}}let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}break;}}}})();"""
+                js_trans_macro = r"""(function(){function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<5){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{doScopedSearch();},800);return;}}if(attempts<5){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},1000);}}let tbodies=Array.from(document.querySelectorAll('tbody'));for(let tbody of tbodies){let tr=tbody.querySelector('tr');if(tr&&tr.children.length>=4){let isTarget=Array.from(tr.children).some(td=>{let txt=td.textContent.toLowerCase().trim();return txt==='normal'||txt==='payment';});if(isTarget){let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim()==='freespins')return true;}return false;});if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}break;}}}})();"""
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -293,8 +322,8 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
                 
-                print("[PLAYBISON] Waiting 10 seconds for transactions check to complete...")
-                time.sleep(10.0)
+                print("[PLAYBISON] Waiting 18 seconds for transactions check to complete...")
+                time.sleep(18.0)
                 
                 js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doExactSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);}}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doExactSearch,800);}else{setTimeout(doExactSearch,800);}},3500);}})();"""
                 pyperclip.copy(js_payment_log_macro)
@@ -310,8 +339,8 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for search results to load...")
                 time.sleep(6.0)
                 
-                # Use the player_id extracted from the previous step
-                extracted_id = player_id
+                # Use the true player_id extracted from the wallet page
+                extracted_id = true_player_id
                 
                 if extracted_id and extracted_id.isdigit():
                     print(f"[PLAYBISON] Using Player ID for PaymentIQ search: {extracted_id}")
@@ -340,6 +369,56 @@ def main():
                     pyautogui.press('enter')
                     print(f"[PAYMENTIQ] Searched for user{extracted_id}")
                     
+                    print("[PAYMENTIQ] Waiting 8 seconds for search results to load...")
+                    time.sleep(8.0)
+                    
+                    js_piq_check = r"""(function(){let all=Array.from(document.querySelectorAll('th'));let holderTh=all.find(th=>th.textContent.trim().toLowerCase()==='holder');let successTh=all.find(th=>th.textContent.trim().toLowerCase()==='last success');let holder='';let lastSuccess='';if(holderTh||successTh){let tr=holderTh?holderTh.closest('tr'):successTh.closest('tr');let ths=Array.from(tr.children);let hIdx=holderTh?ths.indexOf(holderTh):-1;let sIdx=successTh?ths.indexOf(successTh):-1;let tbody=tr.parentElement.nextElementSibling||tr.closest('table').querySelector('tbody');if(tbody){let firstDataRow=tbody.querySelector('tr');if(firstDataRow&&firstDataRow.children.length>Math.max(hIdx,sIdx)){if(hIdx!==-1)holder=firstDataRow.children[hIdx].textContent.trim();if(sIdx!==-1)lastSuccess=firstDataRow.children[sIdx].textContent.trim();}}}let res='HOLDER:'+holder+'|SUCCESS:'+lastSuccess;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                    
+                    pyperclip.copy('')
+                    pyperclip.copy(js_piq_check)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    
+                    time.sleep(1.5)
+                    piq_res = pyperclip.paste().strip()
+                    
+                    if "HOLDER:" in piq_res and "|SUCCESS:" in piq_res:
+                        parts = piq_res.replace("HOLDER:", "").split("|SUCCESS:")
+                        piq_holder = parts[0].strip()
+                        piq_success = parts[1].strip()
+                        
+                        print(f"\n[PAYMENTIQ] Extraction Result - Holder: '{piq_holder}', Last Success: '{piq_success}'")
+                        
+                        import unicodedata
+                        def normalize(s):
+                            return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode('utf-8').lower().strip()
+                        
+                        if normalize(true_player_name) == normalize(piq_holder) and piq_holder:
+                            print(f"[CHECK] ✅ Name Match: '{true_player_name}' matches PaymentIQ '{piq_holder}'")
+                        else:
+                            print(f"[CHECK] ❌ Name MISMATCH! Playbison: '{true_player_name}' vs PaymentIQ: '{piq_holder}'")
+                            
+                        if piq_success:
+                            from datetime import datetime, timedelta
+                            try:
+                                date_str = piq_success[:10]
+                                success_date = datetime.strptime(date_str, "%Y-%m-%d")
+                                ninety_days_ago = datetime.now() - timedelta(days=90)
+                                if success_date >= ninety_days_ago:
+                                    print(f"[CHECK] ✅ Last Success ({date_str}) is within the last 3 months!")
+                                else:
+                                    print(f"[CHECK] ❌ Last Success ({date_str}) is OLDER than 3 months!")
+                            except Exception as e:
+                                print(f"[CHECK] ⚠️ Could not parse date '{piq_success}': {e}")
+                        else:
+                            print("[CHECK] ❌ No Last Success date found in PaymentIQ table (User has no successful deposits/withdrawals here?)")
+                    else:
+                        print(f"[PAYMENTIQ] Could not extract table data. Raw: {piq_res}")
                 else:
                     print(f"[PLAYBISON] Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
             else:
