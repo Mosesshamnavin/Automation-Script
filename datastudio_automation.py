@@ -406,8 +406,8 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
                 
-                print("[PLAYBISON] Waiting 18 seconds for transactions check to complete...")
-                time.sleep(18.0)
+                print("[PLAYBISON] Waiting 10 seconds for transactions check to complete...")
+                time.sleep(10.0)
                 
                 js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doExactSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);}}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doExactSearch,800);}else{setTimeout(doExactSearch,800);}},3500);}})();"""
                 pyperclip.copy(js_payment_log_macro)
@@ -441,6 +441,27 @@ def main():
                     print("[PAYMENTIQ] Waiting 8 seconds for page to load...")
                     time.sleep(8.0)
                     
+                    # Verify we aren't on the login page to avoid locking the account
+                    js_check_login = r"""(function(){let isLoggedOut = window.location.hostname.includes("auth") || window.location.href.includes("login") ? "YES" : "NO";let input=document.createElement('input');input.value="LOGGED_OUT:"+isLoggedOut;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                    
+                    pyperclip.copy('WAITING')
+                    pyperclip.copy(js_check_login)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    
+                    time.sleep(1.0)
+                    login_status = pyperclip.paste().strip()
+                    if login_status == "LOGGED_OUT:YES":
+                        print("\n[ERROR] PaymentIQ is logged out (auth portal detected)!")
+                        print("[ERROR] Stopping workflow to prevent account lockout.")
+                        print("[MAIN] Please log into PaymentIQ manually and restart the script.")
+                        return
+                    
                     js_piq_macro = r"""(function(){let query="user###ID###";let inputs=Array.from(document.querySelectorAll('input'));let visibleInputs=inputs.filter(i=>i.getBoundingClientRect().width>0&&i.type!=='hidden'&&i.type!=='checkbox'&&i.type!=='radio');let searchInput=visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p==='search...';})||visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p.includes('search');})||visibleInputs[0];if(searchInput){searchInput.focus();let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(searchInput,query);else searchInput.value=query;searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));},500);}})();""".replace("###ID###", extracted_id)
                     
                     pyperclip.copy(js_piq_macro)
@@ -456,7 +477,7 @@ def main():
                     print("[PAYMENTIQ] Waiting 8 seconds for search results to load...")
                     time.sleep(8.0)
                     
-                    js_piq_check = r"""(function(){let all=Array.from(document.querySelectorAll('th'));let holderTh=all.find(th=>th.textContent.trim().toLowerCase()==='holder');let successTh=all.find(th=>th.textContent.trim().toLowerCase()==='last success');let holder='';let lastSuccess='';if(holderTh||successTh){let tr=holderTh?holderTh.closest('tr'):successTh.closest('tr');let ths=Array.from(tr.children);let hIdx=holderTh?ths.indexOf(holderTh):-1;let sIdx=successTh?ths.indexOf(successTh):-1;let tbody=tr.parentElement.nextElementSibling||tr.closest('table').querySelector('tbody');if(tbody){let firstDataRow=tbody.querySelector('tr');if(firstDataRow&&firstDataRow.children.length>Math.max(hIdx,sIdx)){if(hIdx!==-1)holder=firstDataRow.children[hIdx].textContent.trim();if(sIdx!==-1)lastSuccess=firstDataRow.children[sIdx].textContent.trim();}}}let res='HOLDER:'+holder+'|SUCCESS:'+lastSuccess;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                    js_piq_check = r"""(function(){let all=Array.from(document.querySelectorAll('th'));let holderTh=all.find(th=>th.textContent.trim().toLowerCase()==='holder');let successTh=all.find(th=>th.textContent.trim().toLowerCase()==='last success');let accountTh=all.find(th=>th.textContent.trim().toLowerCase()==='account');let holder='';let lastSuccess='';let account='';if(holderTh||successTh||accountTh){let tr=holderTh?holderTh.closest('tr'):(successTh?successTh.closest('tr'):accountTh.closest('tr'));let ths=Array.from(tr.children);let hIdx=holderTh?ths.indexOf(holderTh):-1;let sIdx=successTh?ths.indexOf(successTh):-1;let aIdx=accountTh?ths.indexOf(accountTh):-1;let tbody=tr.parentElement.nextElementSibling||tr.closest('table').querySelector('tbody');if(tbody){let firstDataRow=tbody.querySelector('tr');if(firstDataRow&&firstDataRow.children.length>Math.max(hIdx,sIdx,aIdx)){if(hIdx!==-1)holder=firstDataRow.children[hIdx].textContent.trim();if(sIdx!==-1)lastSuccess=firstDataRow.children[sIdx].textContent.trim();if(aIdx!==-1)account=firstDataRow.children[aIdx].textContent.trim();}}}let res='HOLDER:'+holder+'|SUCCESS:'+lastSuccess+'|ACCOUNT:'+account;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
                     
                     pyperclip.copy('')
                     pyperclip.copy(js_piq_check)
@@ -472,11 +493,19 @@ def main():
                     piq_res = pyperclip.paste().strip()
                     
                     if "HOLDER:" in piq_res and "|SUCCESS:" in piq_res:
-                        parts = piq_res.replace("HOLDER:", "").split("|SUCCESS:")
-                        piq_holder = parts[0].strip()
-                        piq_success = parts[1].strip()
+                        parts1 = piq_res.replace("HOLDER:", "").split("|SUCCESS:")
+                        piq_holder = parts1[0].strip()
+                        rest = parts1[1].strip()
                         
-                        print(f"\n[PAYMENTIQ] Extraction Result - Holder: '{piq_holder}', Last Success: '{piq_success}'")
+                        piq_account = ""
+                        if "|ACCOUNT:" in rest:
+                            parts2 = rest.split("|ACCOUNT:")
+                            piq_success = parts2[0].strip()
+                            piq_account = parts2[1].strip()
+                        else:
+                            piq_success = rest
+                        
+                        print(f"\n[PAYMENTIQ] Extraction Result - Holder: '{piq_holder}', Last Success: '{piq_success}', Account: '{piq_account}'")
                         
                         import unicodedata
                         def normalize(s):
@@ -501,6 +530,39 @@ def main():
                                 print(f"[CHECK] ⚠️ Could not parse date '{piq_success}': {e}")
                         else:
                             print("[CHECK] ❌ No Last Success date found in PaymentIQ table (User has no successful deposits/withdrawals here?)")
+                            
+                        if piq_account and ("*" in piq_account or "x" in piq_account.lower()):
+                            print(f"\n[PAYMENTIQ] Credit card found: '{piq_account}'. Switching back to Playbison to add a note...")
+                            # Switch back to Playbison Wallet tab
+                            pyautogui.hotkey('ctrl', 'shift', 'tab')
+                            time.sleep(1.0)
+                            
+                            note_text = f"{piq_account} required cc"
+                            js_add_note = f"""(function(){{
+                                let ta = document.querySelector('textarea');
+                                if(ta) {{
+                                    let setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                                    if(setter) setter.call(ta, '{note_text}');
+                                    else ta.value = '{note_text}';
+                                    ta.dispatchEvent(new Event('input', {{bubbles:true}}));
+                                    ta.dispatchEvent(new Event('change', {{bubbles:true}}));
+                                }}
+                                setTimeout(()=>{{
+                                    let btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().toLowerCase() === 'add note' && b.getBoundingClientRect().width > 0);
+                                    if(btn) btn.click();
+                                }}, 500);
+                            }})();"""
+                            pyperclip.copy(js_add_note)
+                            pyautogui.hotkey('ctrl', 'l')
+                            time.sleep(0.3)
+                            pyautogui.write('javascript:')
+                            time.sleep(0.2)
+                            pyautogui.hotkey('ctrl', 'v')
+                            time.sleep(0.3)
+                            pyautogui.press('enter')
+                            
+                            time.sleep(1.5)
+                            print(f"[PLAYBISON] Added note: '{note_text}'")
                     else:
                         print(f"[PAYMENTIQ] Could not extract table data. Raw: {piq_res}")
                 else:
