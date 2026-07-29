@@ -7,6 +7,7 @@ A hybrid Python + JavaScript automation suite designed to streamline manual user
 - **Headless-Free Execution**: Operates directly inside your authenticated Chrome browser session, completely avoiding CAPTCHAs, 2FA prompts, and anti-bot systems that block standard headless browsers.
 - **Smart DOM Interactions**: Injects highly targeted JavaScript macros directly into the browser to handle dynamic React/Vue elements, complex shadow DOMs, and nested iframes instantly.
 - **Advanced Verification Checks**: Automatically flags duplicate accounts and detects credit card entries for immediate documentation.
+- **Conditional Cancellation Notes**: Intelligently generates the exact Playbison cancellation notes based on Name Mismatches, W/D Ratios, Operator Rules (Apple/Google Pay), and Credit Card requirements.
 
 ## Getting Started
 
