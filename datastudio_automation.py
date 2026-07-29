@@ -55,7 +55,7 @@ def main():
     # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
     # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
     # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
-    js_extract_macro = "(function(){try{function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function normStr(s){if(!s)return'';return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase().trim();}for(let doc of getFrames()){if(!doc||!doc.body)continue;let all=Array.from(doc.querySelectorAll('*'));function getVal(lbl){let l=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()===lbl.toLowerCase());if(!l)return'';if(l.tagName==='TD'&&l.nextElementSibling)return l.nextElementSibling.textContent.trim();let tr=l.closest('tr');if(tr&&tr.children.length>=2)return tr.children[1].textContent.trim();if(l.nextElementSibling)return l.nextElementSibling.textContent.trim();return'';}let op=getVal('Operator').toUpperCase();let fn=getVal('first name');let ln=getVal('last name');let wid=getVal('wallet_id');if(op.includes('COINSPAID')){prompt('RESULT:','COINSPAID_SKIP|WALLET:'+wid);return;}let reqHeader=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='request data');let reqStr='';if(reqHeader){let tr=reqHeader.closest('tr');if(tr&&tr.nextElementSibling){reqStr=tr.nextElementSibling.textContent.trim();}else if(reqHeader.closest('table')){let tbl=reqHeader.closest('table');let rows=Array.from(tbl.querySelectorAll('tbody tr, tr')).filter(r=>r!==reqHeader.closest('tr'));if(rows.length>0)reqStr=rows[0].textContent.trim();}}if(!reqStr){let JSONEl=all.find(e=>e.children.length===0&&(e.textContent.includes('maskedAccount')||e.textContent.includes('userId')||e.textContent.includes('accountHolder')));if(JSONEl)reqStr=JSONEl.textContent.trim();}if(reqStr){let match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']/i);if(!match)match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']?([^,}\r\n]+)/i);let acc=match?match[1].replace(/[\"']/g,'').trim():'';if(op.includes('PAYSAFECARD')||op.includes('SKRILL')){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}else{prompt('MISMATCH:','NAMEFAIL:maskedAccount not found|WALLET:'+wid);return;}}else{let fnNorm=normStr(fn);let lnNorm=normStr(ln);let reqNorm=normStr(reqStr);let fnMatch=!fnNorm||reqNorm.includes(fnNorm);let lnMatch=!lnNorm||reqNorm.includes(lnNorm);if(fnMatch&&lnMatch){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}else{prompt('RESULT:',reqStr+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city'));return;}}else{prompt('MISMATCH:','NAMEFAIL:'+fn+' '+ln+'|WALLET:'+wid);return;}}}}prompt('ERROR:','NOTFOUND|WALLET:');}catch(e){prompt('ERROR:','NOTFOUND|WALLET:');}})();"
+    js_extract_macro = "(function(){try{function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function normStr(s){if(!s)return'';return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase().trim();}for(let doc of getFrames()){if(!doc||!doc.body)continue;let all=Array.from(doc.querySelectorAll('*'));function getVal(lbl){let l=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()===lbl.toLowerCase());if(!l)return'';if(l.tagName==='TD'&&l.nextElementSibling)return l.nextElementSibling.textContent.trim();let tr=l.closest('tr');if(tr&&tr.children.length>=2)return tr.children[1].textContent.trim();if(l.nextElementSibling)return l.nextElementSibling.textContent.trim();return'';}let op=getVal('Operator').toUpperCase();let fn=getVal('first name');let ln=getVal('last name');let wid=getVal('wallet_id');if(op.includes('COINSPAID')){prompt('RESULT:','COINSPAID_SKIP|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}let reqHeader=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='request data');let reqStr='';if(reqHeader){let tr=reqHeader.closest('tr');if(tr&&tr.nextElementSibling){reqStr=tr.nextElementSibling.textContent.trim();}else if(reqHeader.closest('table')){let tbl=reqHeader.closest('table');let rows=Array.from(tbl.querySelectorAll('tbody tr, tr')).filter(r=>r!==reqHeader.closest('tr'));if(rows.length>0)reqStr=rows[0].textContent.trim();}}if(!reqStr){let JSONEl=all.find(e=>e.children.length===0&&(e.textContent.includes('maskedAccount')||e.textContent.includes('userId')||e.textContent.includes('accountHolder')));if(JSONEl)reqStr=JSONEl.textContent.trim();}if(reqStr){let match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']/i);if(!match)match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']?([^,}\r\n]+)/i);let acc=match?match[1].replace(/[\"']/g,'').trim():'';if(op.includes('PAYSAFECARD')||op.includes('SKRILL')){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}else{prompt('MISMATCH:','NAMEFAIL:maskedAccount not found|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}else{let fnNorm=normStr(fn);let lnNorm=normStr(ln);let reqNorm=normStr(reqStr);let fnMatch=!fnNorm||reqNorm.includes(fnNorm);let lnMatch=!lnNorm||reqNorm.includes(lnNorm);if(fnMatch&&lnMatch){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}else{prompt('RESULT:',reqStr+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}else{prompt('MISMATCH:','NAMEFAIL:'+fn+' '+ln+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}}}prompt('ERROR:','NOTFOUND|WALLET:');}catch(e){prompt('ERROR:','NOTFOUND|WALLET:');}})();"
     
     pyperclip.copy("WAITING_FOR_PROMPT")
     pyperclip.copy(js_extract_macro)
@@ -101,18 +101,26 @@ def main():
     else:
         rest = ""
 
-    # Extract fn, ln, city
+    # Extract fn, ln, city, op
     fn = ""
     ln = ""
     city = ""
+    playbison_op = ""
     if rest:
         if "|LN:" in rest:
             fn, rest = rest.split("|LN:")
             fn = fn.strip()
             if "|CITY:" in rest:
-                ln, city = rest.split("|CITY:")
-                ln = ln.strip()
-                city = city.strip()
+                if "|OP:" in rest:
+                    ln, rest = rest.split("|CITY:")
+                    ln = ln.strip()
+                    city, playbison_op = rest.split("|OP:")
+                    city = city.strip()
+                    playbison_op = playbison_op.strip()
+                else:
+                    ln, city = rest.split("|CITY:")
+                    ln = ln.strip()
+                    city = city.strip()
                 
     if fn and ln:
         print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
@@ -423,6 +431,28 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for search results to load...")
                 time.sleep(6.0)
                 
+                # Extract the last deposit ID from the Payment Log
+                js_get_last_deposit = r"""(function(){let allRows=Array.from(document.querySelectorAll('tbody tr'));let headers=Array.from(document.querySelectorAll('th'));let typeIdx=headers.findIndex(th=>th.textContent.trim().toLowerCase()==='type');let idIdx=headers.findIndex(th=>th.textContent.trim().toLowerCase()==='id');if(typeIdx!==-1&&idIdx!==-1){let depositRow=allRows.find(tr=>{if(tr.children.length>typeIdx){let typeVal=tr.children[typeIdx].textContent.trim().toUpperCase();return typeVal==='DEPOSIT';}return false;});if(depositRow&&depositRow.children.length>idIdx){let depId=depositRow.children[idIdx].textContent.trim();let input=document.createElement('input');input.value="DEP_ID:"+depId;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);return;}}let input=document.createElement('input');input.value="DEP_ID:NOT_FOUND";document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                pyperclip.copy('WAITING')
+                pyperclip.copy(js_get_last_deposit)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                
+                time.sleep(1.0)
+                dep_res = pyperclip.paste().strip()
+                last_deposit_id = ""
+                if dep_res.startswith("DEP_ID:"):
+                    last_deposit_id = dep_res.replace("DEP_ID:", "").strip()
+                    if last_deposit_id != "NOT_FOUND":
+                        print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id}")
+                    else:
+                        print(f"[PLAYBISON] Could not find a DEPOSIT row in the Payment Log.")
+                
                 # Use the true player_id extracted from the wallet page
                 extracted_id = true_player_id
                 
@@ -531,13 +561,52 @@ def main():
                         else:
                             print("[CHECK] ❌ No Last Success date found in PaymentIQ table (User has no successful deposits/withdrawals here?)")
                             
-                        if piq_account and ("*" in piq_account or "x" in piq_account.lower()):
-                            print(f"\n[PAYMENTIQ] Credit card found: '{piq_account}'. Switching back to Playbison to add a note...")
+                        import unicodedata
+                        def normalize(s):
+                            return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode('utf-8').lower().strip()
+                            
+                        is_cc = piq_account and ("*" in piq_account or "x" in piq_account.lower())
+                        names_match = (normalize(true_player_name) == normalize(piq_holder))
+                        
+                        note_text = ""
+                        if not names_match and not is_cc:
+                            # Condition 1
+                            note_text = f"wd {extracted_id} cancelled, 3rd party \"{piq_holder}\" / Req last dep {last_deposit_id}"
+                        elif not names_match and is_cc:
+                            # Condition 2
+                            note_text = f"wd {extracted_id} cancelled, req confirmation of card ownership {piq_account}"
+                        elif ratio_val is not None and ratio_val >= 25.0:
+                            # Condition 3
+                            note_text = f"wd {extracted_id} cancelled, req dep {last_deposit_id}, w/d ratio is {ratio_val}%"
+                        elif is_cc:
+                            # Condition 4
+                            op_upper = playbison_op.upper()
+                            if "APPLE PAY" in op_upper or "APPLE" in op_upper:
+                                if "BITEXPRO" in op_upper:
+                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT BITEXPRO APPLE PAY"
+                                elif "BANK" in op_upper:
+                                    note_text = f"wd {extracted_id} cancelled, Req APPLE PAY BANK"
+                                elif "ARI10" in op_upper:
+                                    note_text = f"wd {extracted_id} cancelled, Req ARI10 APPLE"
+                                else:
+                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT APPLE PAY"
+                            elif "GOOGLE PAY" in op_upper or "GOOGLE" in op_upper:
+                                if "BITEXPRO" in op_upper:
+                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT BITEXPRO GOOGLE PAY"
+                                elif "ARI10" in op_upper:
+                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT ARI10 GOOGLE"
+                                else:
+                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT GOOGLE PAY"
+                            else:
+                                note_text = f"wd {extracted_id} cancelled, Req CC {piq_account}"
+                                
+                        if note_text:
+                            print(f"\n[CANCELLATION NOTE] Generated: '{note_text}'")
+                            print("[PLAYBISON] Switching back to Playbison to inject note...")
                             # Switch back to Playbison Wallet tab
                             pyautogui.hotkey('ctrl', 'shift', 'tab')
                             time.sleep(1.0)
                             
-                            note_text = f"{piq_account} required cc"
                             js_add_note = f"""(function(){{
                                 let ta = document.querySelector('textarea');
                                 if(ta) {{
@@ -547,10 +616,20 @@ def main():
                                     ta.dispatchEvent(new Event('input', {{bubbles:true}}));
                                     ta.dispatchEvent(new Event('change', {{bubbles:true}}));
                                 }}
-                                setTimeout(()=>{{
-                                    let btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim().toLowerCase() === 'add note' && b.getBoundingClientRect().width > 0);
-                                    if(btn) btn.click();
-                                }}, 500);
+                                let selects = Array.from(document.querySelectorAll('select'));
+                                let noteSelect = selects.find(s=>s.parentElement&&s.parentElement.textContent.toLowerCase().includes('note type')||s.parentElement.previousElementSibling&&s.parentElement.previousElementSibling.textContent.toLowerCase().includes('note type')||s.closest('div')&&s.closest('div').textContent.toLowerCase().includes('note type'));
+                                if(!noteSelect && selects.length > 0) noteSelect = selects[0];
+                                if(noteSelect) {{
+                                    for(let o of noteSelect.options){{
+                                        if(o.textContent.trim().toLowerCase()==='important'){{
+                                            o.selected=true;
+                                        }}else{{
+                                            o.selected=false;
+                                        }}
+                                    }}
+                                    noteSelect.dispatchEvent(new Event('change', {{bubbles:true}}));
+                                    noteSelect.dispatchEvent(new Event('input', {{bubbles:true}}));
+                                }}
                             }})();"""
                             pyperclip.copy(js_add_note)
                             pyautogui.hotkey('ctrl', 'l')
@@ -562,7 +641,9 @@ def main():
                             pyautogui.press('enter')
                             
                             time.sleep(1.5)
-                            print(f"[PLAYBISON] Added note: '{note_text}'")
+                            print("[PLAYBISON] Note injected! Set to IMPORTANT. Waiting for manual submit.")
+                        else:
+                            print("[PHASE 6] No conditions met for cancellation note.")
                     else:
                         print(f"[PAYMENTIQ] Could not extract table data. Raw: {piq_res}")
                 else:
