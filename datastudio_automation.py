@@ -143,7 +143,8 @@ def main():
             setTimeout(()=>{{
                 let trs=Array.from(document.querySelectorAll('tbody tr')).filter(r=>r.children.length>3); 
                 if(trs.length>1){{ 
-                    let cityInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by city'));
+                    let inputs2 = Array.from(document.querySelectorAll('input'));
+                    let cityInput = inputs2.find(i=>(i.placeholder||'').toLowerCase().includes('search by city'));
                     if(cityInput && city){{ 
                         let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; 
                         if(s)s.call(cityInput, city); else cityInput.value=city; 
@@ -403,7 +404,154 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
                 time.sleep(6.0)
                 
-                js_trans_macro = r"""(function(){function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<5){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{doScopedSearch();},800);return;}}if(attempts<5){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},1000);}}let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('notes'))return true;}return false;});if(!tTab){tTab=links.find(e=>e.textContent.toLowerCase().trim()==='transactions');}if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}})();"""
+                js_trans_macro = r"""(function(){
+function startScraping(preId) {
+    let counts = {};
+    let activeDoc = document;
+    let initialWaitCount = 0;
+    
+    function scrapeCurrentPage() {
+        let docs=[document];
+        let frames=document.querySelectorAll('iframe, frame');
+        for(let f of frames){
+            try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}
+        }
+        for(let d of docs) {
+            if(d.querySelector('table')) { activeDoc = d; break; }
+        }
+        let tbody = activeDoc.querySelector('tbody');
+        if(!tbody) return false;
+        let trs = Array.from(tbody.querySelectorAll('tr')).filter(r=>r.children.length>5);
+        if(trs.length === 0) return false;
+        return trs;
+    }
+    
+    let valIdx = -1;
+    function processRows(trs) {
+        let firstId = trs[0].children[0].textContent.trim();
+        if (valIdx === -1) {
+            let topRow = trs[0];
+            for (let i=5; i<topRow.children.length; i++) {
+                let txt = topRow.children[i].textContent.trim();
+                if (txt && /^-?\d+\.\d{2}$/.test(txt)) {
+                    valIdx = i;
+                    break;
+                }
+            }
+        }
+        for(let tr of trs) {
+            if (valIdx !== -1 && tr.children.length > valIdx) {
+                let val = tr.children[valIdx].textContent.trim();
+                if(val && (val.startsWith('-') || /^[0-9]/.test(val))) {
+                    counts[val] = (counts[val] || 0) + 1;
+                }
+            }
+        }
+        return firstId;
+    }
+    
+    function getNextBtn() {
+        let btns = Array.from(activeDoc.querySelectorAll('button, a, div[role="button"]'));
+        let nextBtn = btns.find(b => b.getAttribute('aria-label') && b.getAttribute('aria-label').toLowerCase().includes('next'));
+        if(!nextBtn) nextBtn = btns.find(b => b.textContent.trim().toLowerCase() === 'next' || b.textContent.trim() === '>');
+        if(!nextBtn) nextBtn = btns.find(b => b.textContent.trim().toLowerCase() === 'chevron_right' || b.textContent.trim().toLowerCase() === 'keyboard_arrow_right');
+        if(!nextBtn) {
+            let els = Array.from(activeDoc.querySelectorAll('*'));
+            let pageText = els.find(e => /of\s+\d+/.test(e.textContent) && e.children.length === 0);
+            if(pageText) {
+                let parent = pageText.parentElement;
+                if(parent) {
+                    let cBtns = Array.from(parent.querySelectorAll('button'));
+                    if(cBtns.length >= 2) nextBtn = cBtns[cBtns.length-1];
+                }
+            }
+        }
+        return nextBtn;
+    }
+    
+    function simClickBtn(el){
+        if(!el)return;
+        el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));
+        el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
+        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
+        if(typeof el.click==='function')el.click();
+    }
+    
+    let oldFirstId = null;
+    let pageCount = 0;
+    
+    function waitAndStart() {
+        let trs = scrapeCurrentPage();
+        if(!trs || trs.length === 0) {
+            initialWaitCount++;
+            if(initialWaitCount > 20) { showPrompt(); return; }
+            setTimeout(waitAndStart, 500);
+            return;
+        }
+        let curId = trs[0].children[0].textContent.trim();
+        // Wait until ID changes from the old ID
+        if(preId && curId === preId && initialWaitCount < 20) {
+            initialWaitCount++;
+            setTimeout(waitAndStart, 500);
+            return;
+        }
+        
+        loop(); // Now we are ready!
+    }
+    
+    function showPrompt() {
+        let res = Object.entries(counts).map(e => e[0] + ": " + e[1]).join('\n');
+        let total = Object.values(counts).reduce((a,b)=>a+b, 0);
+        let finalStr = "Total transactions: " + total + "\n\n" + res;
+        setTimeout(() => {
+            prompt("Scraping Complete! Copy your results:", finalStr);
+        }, 500);
+    }
+    
+    function loop() {
+        let trs = scrapeCurrentPage();
+        if(!trs) {
+            setTimeout(loop, 500);
+            return;
+        }
+        
+        let currentId = processRows(trs);
+        pageCount++;
+        let nextBtn = getNextBtn();
+        let disabled = false;
+        if(nextBtn) {
+            disabled = nextBtn.disabled || nextBtn.classList.contains('disabled') || nextBtn.getAttribute('aria-disabled')==='true';
+        }
+        if(nextBtn && !disabled && pageCount < 200) {
+            oldFirstId = currentId;
+            simClickBtn(nextBtn);
+            let checkInterval = setInterval(() => {
+                let trs2 = scrapeCurrentPage();
+                if(trs2) {
+                    let newId = trs2[0].children[0].textContent.trim();
+                    if(newId !== oldFirstId) {
+                        clearInterval(checkInterval);
+                        setTimeout(loop, 100);
+                    }
+                }
+            }, 200);
+            setTimeout(() => { clearInterval(checkInterval); }, 5000);
+        } else {
+            showPrompt();
+        }
+    }
+    waitAndStart(); // Start by waiting
+
+function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<5){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{
+    let docs=getFrames(); let tmpDoc = docs.find(d=>d.querySelector('table'));
+    let preId = null;
+    if(tmpDoc) {
+        let trs = Array.from(tmpDoc.querySelectorAll('tbody tr')).filter(r=>r.children.length>5);
+        if(trs.length>0) preId = trs[0].children[0].textContent.trim();
+    }
+    doScopedSearch();
+    setTimeout(() => startScraping(preId), 500);
+},800);return;}}if(attempts<5){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},1000);}}let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('notes'))return true;}return false;});if(!tTab){tTab=links.find(e=>e.textContent.toLowerCase().trim()==='transactions');}if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}})();"""
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
