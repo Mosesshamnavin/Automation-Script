@@ -2,6 +2,7 @@ import pyautogui
 import time
 import pyperclip
 import webbrowser
+from macro_loader import load_macro
 
 def main():
     print("============================================================")
@@ -37,7 +38,7 @@ def main():
     pyautogui.hotkey('ctrl', '1')
     time.sleep(1)
     
-    js_open_modal = f"(function(){{let id='{player_id}';let email='{player_email}';window.location.hash='#action:admin.payment.details:'+id;let els=Array.from(document.querySelectorAll('*'));let target=els.find(e=>e.children.length===0&&(e.textContent.trim()===id||(email&&e.textContent.trim().toLowerCase()===email.toLowerCase())));if(target){{let clickEl=target.closest('a')||target;clickEl.click();clickEl.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));}}}})();"
+    js_open_modal = load_macro("ds_open_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email)
     
     pyperclip.copy(js_open_modal)
     pyautogui.hotkey('ctrl', 'l')
@@ -55,7 +56,7 @@ def main():
     # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
     # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
     # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
-    js_extract_macro = "(function(){try{function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function normStr(s){if(!s)return'';return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/ł/g,'l').replace(/Ł/g,'L').toLowerCase().trim();}for(let doc of getFrames()){if(!doc||!doc.body)continue;let all=Array.from(doc.querySelectorAll('*'));function getVal(lbl){let l=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()===lbl.toLowerCase());if(!l)return'';if(l.tagName==='TD'&&l.nextElementSibling)return l.nextElementSibling.textContent.trim();let tr=l.closest('tr');if(tr&&tr.children.length>=2)return tr.children[1].textContent.trim();if(l.nextElementSibling)return l.nextElementSibling.textContent.trim();return'';}let op=getVal('Operator').toUpperCase();let fn=getVal('first name');let ln=getVal('last name');let wid=getVal('wallet_id');if(op.includes('COINSPAID')){prompt('RESULT:','COINSPAID_SKIP|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}let reqHeader=all.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='request data');let reqStr='';if(reqHeader){let tr=reqHeader.closest('tr');if(tr&&tr.nextElementSibling){reqStr=tr.nextElementSibling.textContent.trim();}else if(reqHeader.closest('table')){let tbl=reqHeader.closest('table');let rows=Array.from(tbl.querySelectorAll('tbody tr, tr')).filter(r=>r!==reqHeader.closest('tr'));if(rows.length>0)reqStr=rows[0].textContent.trim();}}if(!reqStr){let JSONEl=all.find(e=>e.children.length===0&&(e.textContent.includes('maskedAccount')||e.textContent.includes('userId')||e.textContent.includes('accountHolder')));if(JSONEl)reqStr=JSONEl.textContent.trim();}if(reqStr){let match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']([^\"']+)[\"']/i);if(!match)match=reqStr.match(/[\"']?maskedAccount[\"']?\\s*[:=]\\s*[\"']?([^,}\r\n]+)/i);let acc=match?match[1].replace(/[\"']/g,'').trim():'';if(op.includes('PAYSAFECARD')||op.includes('SKRILL')){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}else{prompt('MISMATCH:','NAMEFAIL:maskedAccount not found|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}else{let fnNorm=normStr(fn);let lnNorm=normStr(ln);let reqNorm=normStr(reqStr);let fnMatch=!fnNorm||reqNorm.includes(fnNorm);let lnMatch=!lnNorm||reqNorm.includes(lnNorm);if(fnMatch&&lnMatch){if(acc){prompt('RESULT:',acc+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}else{prompt('RESULT:',reqStr+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}else{prompt('MISMATCH:','NAMEFAIL:'+fn+' '+ln+'|WALLET:'+wid+'|FN:'+fn+'|LN:'+ln+'|CITY:'+getVal('city')+'|OP:'+op);return;}}}}prompt('ERROR:','NOTFOUND|WALLET:');}catch(e){prompt('ERROR:','NOTFOUND|WALLET:');}})();"
+    js_extract_macro = load_macro("ds_extract_modal.js")
     
     pyperclip.copy("WAITING_FOR_PROMPT")
     pyperclip.copy(js_extract_macro)
@@ -127,38 +128,7 @@ def main():
         webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
         time.sleep(6.0)
         
-        js_check_dup = f"""(function(){{
-            function simClick(el){{if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{{bubbles:true}}));el.dispatchEvent(new MouseEvent('mouseup',{{bubbles:true}}));el.dispatchEvent(new MouseEvent('click',{{bubbles:true}}));}}
-            let fn='{fn}'; let ln='{ln}'; let city='{city}';
-            let inputs = Array.from(document.querySelectorAll('input'));
-            let fnInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by firstname'));
-            let lnInput = inputs.find(i=>(i.placeholder||'').toLowerCase().includes('search by lastname'));
-            
-            if(fnInput) {{ let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; if(s)s.call(fnInput, fn); else fnInput.value=fn; fnInput.dispatchEvent(new Event('input',{{bubbles:true}})); }}
-            if(lnInput) {{ let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; if(s)s.call(lnInput, ln); else lnInput.value=ln; lnInput.dispatchEvent(new Event('input',{{bubbles:true}})); }}
-            
-            let searchBtns=Array.from(document.querySelectorAll('button, a')).filter(b=>b.textContent.trim().toLowerCase()==='search'&&b.getBoundingClientRect().width>0);
-            if(searchBtns.length>0) simClick(searchBtns[0]);
-            
-            setTimeout(()=>{{
-                let trs=Array.from(document.querySelectorAll('tbody tr')).filter(r=>r.children.length>3); 
-                if(trs.length>1){{ 
-                    let inputs2 = Array.from(document.querySelectorAll('input'));
-                    let cityInput = inputs2.find(i=>(i.placeholder||'').toLowerCase().includes('search by city'));
-                    if(cityInput && city){{ 
-                        let s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; 
-                        if(s)s.call(cityInput, city); else cityInput.value=city; 
-                        cityInput.dispatchEvent(new Event('input',{{bubbles:true}})); 
-                        let clrBtns=Array.from(document.querySelectorAll('button, a')).filter(b=>b.textContent.trim().toLowerCase()==='search'&&b.getBoundingClientRect().width>0);
-                        if(clrBtns.length>0) simClick(clrBtns[0]); 
-                        setTimeout(()=>{{
-                            let trs2=Array.from(document.querySelectorAll('tbody tr')).filter(r=>r.children.length>3); 
-                            if(trs2.length>1){{prompt('DUPLICATE','YES');}}else{{prompt('DUPLICATE','NO');}}
-                        }}, 4000); 
-                    }} else {{ prompt('DUPLICATE','YES'); }}
-                }}else{{ prompt('DUPLICATE','NO'); }} 
-            }}, 4000);
-        }})();"""
+        js_check_dup = load_macro("ds_check_duplicates.js", FN=fn, LN=ln, CITY=city)
         
         pyperclip.copy("WAITING_FOR_DUP")
         pyperclip.copy(js_check_dup)
@@ -207,7 +177,7 @@ def main():
     email_to_paste = player_email.strip().lower() if player_email else pyperclip.paste().strip().lower()
     
     # Macro 1: Switch to Bison BO and focus the precise <input> box
-    js_macro_1 = "(function(){try{function simClick(el){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));el.dispatchEvent(new MouseEvent('click',{bubbles:true}));}let els=Array.from(document.querySelectorAll('*'));let bison=els.find(e=>e.children.length===0&&e.textContent.trim()==='Bison BO'&&e.getBoundingClientRect().width>0);if(bison){simClick(bison);setTimeout(()=>{let els2=Array.from(document.querySelectorAll('*'));let emailLabel=els2.find(e=>e.children.length===0&&e.textContent.trim()==='Email (lowercase)'&&e.getBoundingClientRect().width>0);if(emailLabel){let r=emailLabel.getBoundingClientRect();let inputs=Array.from(document.querySelectorAll('input'));let target=null;let minDist=Infinity;for(let inp of inputs){let ir=inp.getBoundingClientRect();if(ir.width>0&&ir.top>=r.bottom){let dx=(ir.left+ir.width/2)-(r.left+r.width/2);let dy=ir.top-r.bottom;let d=dx*dx+dy*dy;if(d<minDist){minDist=d;target=inp;}}}if(target){target.focus();if(target.style)target.style.border='3px solid blue';simClick(target);}else{alert('Could not find the email input box!');}}},1500);}}catch(e){alert('Macro 1 Error: '+e.message);}})();"
+    js_macro_1 = load_macro("ds_switch_email.js")
     
     pyperclip.copy(js_macro_1)
     pyautogui.hotkey('ctrl', 'l')
@@ -234,7 +204,7 @@ def main():
     
     print("Executing Phase 2: Opening the Date Picker...")
     # Macro 2: Open Date Picker (using simple point click)
-    js_macro_2 = "(function(){try{function simClick(el){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));el.dispatchEvent(new MouseEvent('click',{bubbles:true}));}let els=Array.from(document.querySelectorAll('*'));let dateLabel=els.find(e=>e.children.length===0&&e.textContent.trim()==='UTC Time'&&e.getBoundingClientRect().width>0);if(dateLabel){let r=dateLabel.getBoundingClientRect();let target=document.elementFromPoint(r.left+10,r.bottom+15);if(target)simClick(target);}}catch(e){alert('Macro 2 Error: '+e.message);}})();"
+    js_macro_2 = load_macro("ds_open_date_picker.js")
 
     pyperclip.copy(js_macro_2)
     pyautogui.hotkey('ctrl', 'l')
@@ -250,7 +220,7 @@ def main():
     
     print("Executing Phase 3: Setting the Date Range (2 months ago -> today)...")
     # Macro 3: Navigate calendar back 1 month (to get 2 months ago), select days, click Apply
-    js_macro_3 = r"""(function(){try {function simClick(el){if(!el) return;let target = el;target.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));target.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));target.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));target.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));target.dispatchEvent(new MouseEvent('click',{bubbles:true}));if(target.style)target.style.border='2px solid red';}let allEls = Array.from(document.querySelectorAll('*'));let includeText = allEls.find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'include today' && e.getBoundingClientRect().width > 0);if (includeText) {let cbNode = includeText.closest('label, mat-checkbox') || includeText.parentElement;let input = cbNode.querySelector('input[type="checkbox"]');let isChecked = false;if (input) {isChecked = input.checked;} else {let ariaNode = cbNode.querySelector('[aria-checked]') || cbNode;isChecked = ariaNode.getAttribute('aria-checked') === 'true';}if (!isChecked) {simClick(input || cbNode);}}setTimeout(() => {let applyBtn = Array.from(document.querySelectorAll('*')).find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'apply' && e.getBoundingClientRect().width > 0);if (applyBtn) {simClick(applyBtn);} else {alert('Could not find Apply button!');}}, 1000);} catch(e) {alert('Macro 3 Error: '+e.message);}})();"""
+    js_macro_3 = load_macro("ds_set_date_range.js")
     
     pyperclip.copy(js_macro_3)
     pyautogui.hotkey('ctrl', 'l')
@@ -266,7 +236,7 @@ def main():
     
     print("Executing Phase 4: Checking W/D ratio (volumes)...")
     # Macro 4: Read W/D ratio (volumes) from Data Studio table using robust multi-tier search
-    js_macro_4 = r"""(function(){try{let allEls=Array.from(document.querySelectorAll('*'));let isMulti=false;let emailHeader=allEls.find(e=>{let t=e.textContent.trim().toLowerCase();return t==='email'&&e.children.length===0&&e.getBoundingClientRect().width>0;});if(emailHeader){let rHeader=emailHeader.getBoundingClientRect();let headerMidX=rHeader.left+rHeader.width/2;let emailCells=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width<=0||r.top<=rHeader.bottom)return false;return Math.abs((r.left+r.width/2)-headerMidX)<100&&e.textContent.includes('@');});if(emailCells.length>1)isMulti=true;}if(isMulti){prompt('WD_RATIO:','MULTIBRAND');return;}let percentEls=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width===0||r.height===0||r.top<150)return false;let txt=e.textContent.trim();return/\d+\s*%/.test(txt);});if(percentEls.length>0){percentEls.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);prompt('WD_RATIO:',percentEls[0].textContent.trim());return;}let ratioHeader=allEls.find(e=>{let t=e.textContent.trim().toLowerCase();return(t.includes('w/d ratio')||t.includes('ratio (volumes)')||t.includes('ratio'))&&e.children.length===0&&e.getBoundingClientRect().width>0;});if(ratioHeader){let rHeader=ratioHeader.getBoundingClientRect();let headerMidX=rHeader.left+rHeader.width/2;let candidateCells=allEls.filter(e=>{if(e.children.length>0)return false;let r=e.getBoundingClientRect();if(r.width<=0||r.top<=rHeader.bottom)return false;return Math.abs((r.left+r.width/2)-headerMidX)<100;});candidateCells.sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top);if(candidateCells.length>0){prompt('WD_RATIO:',candidateCells[0].textContent.trim());return;}}prompt('WD_RATIO:','NO_DATA');}catch(e){prompt('WD_RATIO:','ERROR: '+e.message);}})();"""
+    js_macro_4 = load_macro("ds_read_wd_ratio.js")
 
     pyperclip.copy(js_macro_4)
     pyautogui.hotkey('ctrl', 'l')
@@ -289,7 +259,7 @@ def main():
 
     if ratio_raw == "MULTIBRAND":
         print("[DATASTUDIO] Multibrand (2+ rows) detected. Selecting 'Bison Casino' in Brand filter...")
-        js_macro_brand = r"""(function(){try{function simClick(el){el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));}let allEls=Array.from(document.querySelectorAll('*'));let brandLabel=allEls.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='brand'&&e.getBoundingClientRect().width>0);if(!brandLabel){prompt('WD_FILTER:','BRAND_LABEL_NOT_FOUND');return;}simClick(brandLabel);setTimeout(()=>{let popupEls=Array.from(document.querySelectorAll('*'));let fireballOpt=popupEls.find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='fireball'&&e.getBoundingClientRect().width>0);if(fireballOpt){let row=fireballOpt.closest('.row, [role="row"], [role="option"]')||fireballOpt.parentElement.parentElement;if(row){simClick(row);setTimeout(()=>{simClick(document.body);prompt('WD_FILTER:','SUCCESS');},500);}else{prompt('WD_FILTER:','ROW_NOT_FOUND');}}else{prompt('WD_FILTER:','FIREBALL_NOT_FOUND');}},1500);}catch(e){prompt('WD_FILTER:','ERROR: '+e.message);}})();"""
+        js_macro_brand = load_macro("ds_brand_filter.js")
         
         pyperclip.copy(js_macro_brand)
         pyautogui.hotkey('ctrl', 'l')
@@ -358,7 +328,7 @@ def main():
                 time.sleep(5.0)
                 
                 # Extract the correct Player ID and Name from the wallet page
-                js_extract_player_id = r"""(function(){let txt=document.body.innerText;let match=txt.match(/\(id:\s*(\d+)/i);let id=match?match[1]:'';let all=Array.from(document.querySelectorAll('td'));let nameLabel=all.find(td=>td.textContent.trim().toLowerCase()==='name');let name='';if(nameLabel&&nameLabel.nextElementSibling){name=nameLabel.nextElementSibling.textContent.trim();}let res=id+'|NAME:'+name;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                js_extract_player_id = load_macro("ds_extract_player_id.js")
                 pyperclip.copy('')
                 pyperclip.copy(js_extract_player_id)
                 pyautogui.hotkey('ctrl', 'l')
@@ -390,7 +360,7 @@ def main():
                 # We also use dispatchEvent because some single-page apps ignore a basic .click()
                 # To avoid clicking the global "Notes" menu, we specifically look for the "notes" tab 
                 # that comes right after the "edit personal data" tab in the DOM.
-                js_notes_macro = "(function(){let links=Array.from(document.querySelectorAll('a'));let notes=links.find(e=>{let txt=e.textContent.toLowerCase().trim();if(!txt.startsWith('notes'))return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('edit personal data'))return true;}return false;});if(notes){notes.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));notes.click();}})();"
+                js_notes_macro = load_macro("ds_open_notes.js")
                 pyperclip.copy(js_notes_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -404,106 +374,7 @@ def main():
                 print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
                 time.sleep(6.0)
                 
-                js_trans_macro = r"""(function(){
-function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}
-function simClick(el){if(!el)return;el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}
-function setVal(el,val){if(!el)return;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(el,val);else el.value=val;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new Event('blur',{bubbles:true}));}
-function doScopedSearch(refEl){if(refEl){let c=refEl.parentElement;while(c&&c!==document.body){let bs=Array.from(c.querySelectorAll('*')).filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0;});if(bs.length>0){let best=null;for(let i=bs.length-1;i>=0;i--){if(bs[i].tagName==='BUTTON'){best=bs[i];break;}}if(!best)best=bs[bs.length-1];if(best){let btn=best.closest('button,input,a,div[role="button"]')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}c=c.parentElement;}}return false;}
-
-function findNoteColIdx(doc){
-let tables=Array.from(doc.querySelectorAll('table'));
-let dataTbl=tables.find(t=>Array.from(t.querySelectorAll('th,td')).some(c=>c.textContent.toLowerCase().trim()==='note'));
-if(!dataTbl)return {tbl:null,idx:-1};
-let allTrs=Array.from(dataTbl.querySelectorAll('tr'));
-for(let tr of allTrs){
-let cells=Array.from(tr.children);
-let idx=cells.findIndex(c=>c.textContent.toLowerCase().trim()==='note');
-if(idx!==-1)return {tbl:dataTbl,idx:idx};
-}
-return {tbl:null,idx:-1};
-}
-
-function hasBlankInResults(){
-for(let doc of getFrames()){
-if(!doc)continue;
-let {tbl,idx}=findNoteColIdx(doc);
-if(!tbl||idx===-1)continue;
-let allTrs=Array.from(tbl.querySelectorAll('tr'));
-let headerFound=false;
-for(let tr of allTrs){
-let cells=Array.from(tr.children);
-if(!headerFound){
-if(cells.some(c=>c.textContent.toLowerCase().trim()==='note')){headerFound=true;continue;}
-continue;
-}
-if(cells.length>idx){
-let txt=cells[idx].textContent.trim().toLowerCase();
-if(txt===''||!txt.includes('automatic'))return true;
-}
-}
-}
-return false;
-}
-
-let links=Array.from(document.querySelectorAll('a'));
-let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('notes'))return true;}return false;});
-if(!tTab){tTab=links.find(e=>e.textContent.toLowerCase().trim()==='transactions');}
-
-if(tTab){
-simClick(tTab);
-setTimeout(()=>{
-let globalDLabel=null;
-let globalAmtLabel=null;
-let globalSelectsRev=[];
-let globalDoc=null;
-
-for(let doc of getFrames()){
-if(!doc)continue;
-let all=Array.from(doc.querySelectorAll('*'));
-let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});
-let dLabel=dLabels.pop();
-if(!dLabel)continue;
-globalDLabel=dLabel;
-globalDoc=doc;
-let idx=all.indexOf(dLabel);
-for(let i=idx+1;i<idx+30&&i<all.length;i++){
-if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){
-let d=new Date();d.setMonth(d.getMonth()-1);
-let val=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" 00:00";
-setVal(all[i],val);break;
-}
-}
-let selects=Array.from(doc.querySelectorAll('select'));
-globalSelectsRev=selects.slice().reverse();
-let amtLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});
-globalAmtLabel=amtLabels.pop();
-break;
-}
-
-function setType(val){for(let select of globalSelectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){if(val==='redeem'){select.value=opt.value;select.selectedIndex=opt.index;}else{select.value='';select.selectedIndex=0;}select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}}
-function setAmt(val){if(!globalAmtLabel)return;let all=Array.from(globalAmtLabel.ownerDocument.querySelectorAll('*'));let idx=all.indexOf(globalAmtLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){setVal(all[i],val);break;}}}
-
-setType('redeem');
-setAmt('');
-
-setTimeout(()=>{
-doScopedSearch(globalDLabel);
-
-setTimeout(()=>{
-if(hasBlankInResults()){
-setType('');
-setAmt('-8.01');
-setTimeout(()=>{doScopedSearch(globalDLabel);},600);
-}
-},4000);
-
-},1000);
-
-},3500);
-}else{
-alert("Could not find the Transactions tab!");
-}
-})();"""
+                js_trans_macro = load_macro("ds_check_transactions.js")
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -517,7 +388,7 @@ alert("Could not find the Transactions tab!");
                 print("[PLAYBISON] Waiting 20 seconds for transactions check to complete...")
                 time.sleep(20.0)
                 
-                js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0;});let best=null;for(let i=searchBtns.length-1;i>=0;i--){if(searchBtns[i].tagName==='BUTTON'){best=searchBtns[i];break;}}if(!best&&searchBtns.length>0)best=searchBtns[searchBtns.length-1];if(best){let btn=best.closest('button, input, a, div[role="button"]')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doScopedSearch,800);}else{setTimeout(doScopedSearch,800);}},3500);}})();"""
+                js_payment_log_macro = load_macro("ds_payment_log.js")
                 pyperclip.copy(js_payment_log_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -532,7 +403,7 @@ alert("Could not find the Transactions tab!");
                 time.sleep(6.0)
                 
                 # Extract the last deposit ID from the Payment Log
-                js_get_last_deposit = r"""(function(){let allRows=Array.from(document.querySelectorAll('tbody tr'));let headers=Array.from(document.querySelectorAll('th'));let typeIdx=headers.findIndex(th=>th.textContent.trim().toLowerCase()==='type');let idIdx=headers.findIndex(th=>th.textContent.trim().toLowerCase()==='id');if(typeIdx!==-1&&idIdx!==-1){let depositRow=allRows.find(tr=>{if(tr.children.length>typeIdx){let typeVal=tr.children[typeIdx].textContent.trim().toUpperCase();return typeVal==='DEPOSIT';}return false;});if(depositRow&&depositRow.children.length>idIdx){let depId=depositRow.children[idIdx].textContent.trim();let input=document.createElement('input');input.value="DEP_ID:"+depId;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);return;}}let input=document.createElement('input');input.value="DEP_ID:NOT_FOUND";document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                js_get_last_deposit = load_macro("ds_get_last_deposit.js")
                 pyperclip.copy('WAITING')
                 pyperclip.copy(js_get_last_deposit)
                 pyautogui.hotkey('ctrl', 'l')
@@ -572,7 +443,7 @@ alert("Could not find the Transactions tab!");
                     time.sleep(8.0)
                     
                     # Verify we aren't on the login page to avoid locking the account
-                    js_check_login = r"""(function(){let isLoggedOut = window.location.hostname.includes("auth") || window.location.href.includes("login") ? "YES" : "NO";let input=document.createElement('input');input.value="LOGGED_OUT:"+isLoggedOut;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                    js_check_login = load_macro("piq_check_login.js")
                     
                     pyperclip.copy('WAITING')
                     pyperclip.copy(js_check_login)
@@ -592,7 +463,7 @@ alert("Could not find the Transactions tab!");
                         print("[MAIN] Please log into PaymentIQ manually and restart the script.")
                         return
                     
-                    js_piq_macro = r"""(function(){let query="user###ID###";let inputs=Array.from(document.querySelectorAll('input'));let visibleInputs=inputs.filter(i=>i.getBoundingClientRect().width>0&&i.type!=='hidden'&&i.type!=='checkbox'&&i.type!=='radio');let searchInput=visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p==='search...';})||visibleInputs.find(i=>{let p=(i.placeholder||'').toLowerCase().trim();return p.includes('search');})||visibleInputs[0];if(searchInput){searchInput.focus();let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(searchInput,query);else searchInput.value=query;searchInput.dispatchEvent(new Event('input',{bubbles:true}));searchInput.dispatchEvent(new Event('change',{bubbles:true}));setTimeout(()=>{searchInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keypress',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));searchInput.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));},500);}})();""".replace("###ID###", extracted_id)
+                    js_piq_macro = load_macro("piq_search_user.js", PLAYER_ID=extracted_id)
                     
                     pyperclip.copy(js_piq_macro)
                     pyautogui.hotkey('ctrl', 'l')
@@ -607,7 +478,7 @@ alert("Could not find the Transactions tab!");
                     print("[PAYMENTIQ] Waiting 8 seconds for search results to load...")
                     time.sleep(8.0)
                     
-                    js_piq_check = r"""(function(){let all=Array.from(document.querySelectorAll('th'));let holderTh=all.find(th=>th.textContent.trim().toLowerCase()==='holder');let successTh=all.find(th=>th.textContent.trim().toLowerCase()==='last success');let accountTh=all.find(th=>th.textContent.trim().toLowerCase()==='account');let holder='';let lastSuccess='';let account='';if(holderTh||successTh||accountTh){let tr=holderTh?holderTh.closest('tr'):(successTh?successTh.closest('tr'):accountTh.closest('tr'));let ths=Array.from(tr.children);let hIdx=holderTh?ths.indexOf(holderTh):-1;let sIdx=successTh?ths.indexOf(successTh):-1;let aIdx=accountTh?ths.indexOf(accountTh):-1;let tbody=tr.parentElement.nextElementSibling||tr.closest('table').querySelector('tbody');if(tbody){let firstDataRow=tbody.querySelector('tr');if(firstDataRow&&firstDataRow.children.length>Math.max(hIdx,sIdx,aIdx)){if(hIdx!==-1)holder=firstDataRow.children[hIdx].textContent.trim();if(sIdx!==-1)lastSuccess=firstDataRow.children[sIdx].textContent.trim();if(aIdx!==-1)account=firstDataRow.children[aIdx].textContent.trim();}}}let res='HOLDER:'+holder+'|SUCCESS:'+lastSuccess+'|ACCOUNT:'+account;let input=document.createElement('input');input.value=res;document.body.appendChild(input);input.select();document.execCommand('copy');document.body.removeChild(input);})();"""
+                    js_piq_check = load_macro("piq_check_results.js")
                     
                     pyperclip.copy('')
                     pyperclip.copy(js_piq_check)
@@ -707,30 +578,7 @@ alert("Could not find the Transactions tab!");
                             pyautogui.hotkey('ctrl', 'shift', 'tab')
                             time.sleep(1.0)
                             
-                            js_add_note = f"""(function(){{
-                                let ta = document.querySelector('textarea');
-                                if(ta) {{
-                                    let setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-                                    if(setter) setter.call(ta, '{note_text}');
-                                    else ta.value = '{note_text}';
-                                    ta.dispatchEvent(new Event('input', {{bubbles:true}}));
-                                    ta.dispatchEvent(new Event('change', {{bubbles:true}}));
-                                }}
-                                let selects = Array.from(document.querySelectorAll('select'));
-                                let noteSelect = selects.find(s=>s.parentElement&&s.parentElement.textContent.toLowerCase().includes('note type')||s.parentElement.previousElementSibling&&s.parentElement.previousElementSibling.textContent.toLowerCase().includes('note type')||s.closest('div')&&s.closest('div').textContent.toLowerCase().includes('note type'));
-                                if(!noteSelect && selects.length > 0) noteSelect = selects[0];
-                                if(noteSelect) {{
-                                    for(let o of noteSelect.options){{
-                                        if(o.textContent.trim().toLowerCase()==='important'){{
-                                            o.selected=true;
-                                        }}else{{
-                                            o.selected=false;
-                                        }}
-                                    }}
-                                    noteSelect.dispatchEvent(new Event('change', {{bubbles:true}}));
-                                    noteSelect.dispatchEvent(new Event('input', {{bubbles:true}}));
-                                }}
-                            }})();"""
+                            js_add_note = load_macro("ds_add_note.js", NOTE_TEXT=note_text)
                             pyperclip.copy(js_add_note)
                             pyautogui.hotkey('ctrl', 'l')
                             time.sleep(0.3)
