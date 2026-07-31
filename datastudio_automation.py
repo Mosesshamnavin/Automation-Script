@@ -250,7 +250,7 @@ def main():
     
     print("Executing Phase 3: Setting the Date Range (2 months ago -> today)...")
     # Macro 3: Navigate calendar back 1 month (to get 2 months ago), select days, click Apply
-    js_macro_3 = "(function(){try{function simClick(el){el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));el.dispatchEvent(new MouseEvent('click',{bubbles:true}));if(el.style)el.style.border='2px solid blue';}let arrows=Array.from(document.querySelectorAll('*')).filter(e=>{let t=e.textContent.trim().toLowerCase();let a=e.getAttribute('aria-label');return(t==='chevron_left'||t==='keyboard_arrow_left'||t==='<'||a==='Previous month')&&e.getBoundingClientRect().width>0;});arrows.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);if(arrows.length>=1){let leftPrev=arrows[0];simClick(leftPrev);setTimeout(()=>{let day=new Date().getDate().toString();let days=Array.from(document.querySelectorAll('*')).filter(e=>e.children.length===0&&e.textContent.trim()===day);days=days.filter(e=>{let r=e.getBoundingClientRect();return r.width>15&&r.width<60&&r.height>15&&r.height<60;});days.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);if(days.length>=2){simClick(days[0]);setTimeout(()=>{simClick(days[days.length-1]);setTimeout(()=>{let applyBtn=Array.from(document.querySelectorAll('*')).find(e=>e.children.length===0&&e.textContent.trim().toLowerCase()==='apply'&&e.getBoundingClientRect().width>0);if(applyBtn)simClick(applyBtn);},500);},500);}else{alert('Could not find the days in the calendar! Expected day: '+day);}},1000);}else{alert('Could not find calendar navigation arrows! Found: '+arrows.length);}}catch(e){alert('Macro 3 Error: '+e.message);}})();"
+    js_macro_3 = r"""(function(){try {function simClick(el){if(!el) return;let target = el;target.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));target.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));target.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));target.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));target.dispatchEvent(new MouseEvent('click',{bubbles:true}));if(target.style)target.style.border='2px solid red';}let allEls = Array.from(document.querySelectorAll('*'));let includeText = allEls.find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'include today' && e.getBoundingClientRect().width > 0);if (includeText) {let cbNode = includeText.closest('label, mat-checkbox') || includeText.parentElement;let input = cbNode.querySelector('input[type="checkbox"]');let isChecked = false;if (input) {isChecked = input.checked;} else {let ariaNode = cbNode.querySelector('[aria-checked]') || cbNode;isChecked = ariaNode.getAttribute('aria-checked') === 'true';}if (!isChecked) {simClick(input || cbNode);}}setTimeout(() => {let applyBtn = Array.from(document.querySelectorAll('*')).find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'apply' && e.getBoundingClientRect().width > 0);if (applyBtn) {simClick(applyBtn);} else {alert('Could not find Apply button!');}}, 1000);} catch(e) {alert('Macro 3 Error: '+e.message);}})();"""
     
     pyperclip.copy(js_macro_3)
     pyautogui.hotkey('ctrl', 'l')
@@ -405,153 +405,105 @@ def main():
                 time.sleep(6.0)
                 
                 js_trans_macro = r"""(function(){
-function startScraping(preId) {
-    let counts = {};
-    let activeDoc = document;
-    let initialWaitCount = 0;
-    
-    function scrapeCurrentPage() {
-        let docs=[document];
-        let frames=document.querySelectorAll('iframe, frame');
-        for(let f of frames){
-            try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}
-        }
-        for(let d of docs) {
-            if(d.querySelector('table')) { activeDoc = d; break; }
-        }
-        let tbody = activeDoc.querySelector('tbody');
-        if(!tbody) return false;
-        let trs = Array.from(tbody.querySelectorAll('tr')).filter(r=>r.children.length>5);
-        if(trs.length === 0) return false;
-        return trs;
-    }
-    
-    let valIdx = -1;
-    function processRows(trs) {
-        let firstId = trs[0].children[0].textContent.trim();
-        if (valIdx === -1) {
-            let topRow = trs[0];
-            for (let i=5; i<topRow.children.length; i++) {
-                let txt = topRow.children[i].textContent.trim();
-                if (txt && /^-?\d+\.\d{2}$/.test(txt)) {
-                    valIdx = i;
-                    break;
-                }
-            }
-        }
-        for(let tr of trs) {
-            if (valIdx !== -1 && tr.children.length > valIdx) {
-                let val = tr.children[valIdx].textContent.trim();
-                if(val && (val.startsWith('-') || /^[0-9]/.test(val))) {
-                    counts[val] = (counts[val] || 0) + 1;
-                }
-            }
-        }
-        return firstId;
-    }
-    
-    function getNextBtn() {
-        let btns = Array.from(activeDoc.querySelectorAll('button, a, div[role="button"]'));
-        let nextBtn = btns.find(b => b.getAttribute('aria-label') && b.getAttribute('aria-label').toLowerCase().includes('next'));
-        if(!nextBtn) nextBtn = btns.find(b => b.textContent.trim().toLowerCase() === 'next' || b.textContent.trim() === '>');
-        if(!nextBtn) nextBtn = btns.find(b => b.textContent.trim().toLowerCase() === 'chevron_right' || b.textContent.trim().toLowerCase() === 'keyboard_arrow_right');
-        if(!nextBtn) {
-            let els = Array.from(activeDoc.querySelectorAll('*'));
-            let pageText = els.find(e => /of\s+\d+/.test(e.textContent) && e.children.length === 0);
-            if(pageText) {
-                let parent = pageText.parentElement;
-                if(parent) {
-                    let cBtns = Array.from(parent.querySelectorAll('button'));
-                    if(cBtns.length >= 2) nextBtn = cBtns[cBtns.length-1];
-                }
-            }
-        }
-        return nextBtn;
-    }
-    
-    function simClickBtn(el){
-        if(!el)return;
-        el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));
-        el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
-        el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));
-        if(typeof el.click==='function')el.click();
-    }
-    
-    let oldFirstId = null;
-    let pageCount = 0;
-    
-    function waitAndStart() {
-        let trs = scrapeCurrentPage();
-        if(!trs || trs.length === 0) {
-            initialWaitCount++;
-            if(initialWaitCount > 20) { showPrompt(); return; }
-            setTimeout(waitAndStart, 500);
-            return;
-        }
-        let curId = trs[0].children[0].textContent.trim();
-        // Wait until ID changes from the old ID
-        if(preId && curId === preId && initialWaitCount < 20) {
-            initialWaitCount++;
-            setTimeout(waitAndStart, 500);
-            return;
-        }
-        
-        loop(); // Now we are ready!
-    }
-    
-    function showPrompt() {
-        let res = Object.entries(counts).map(e => e[0] + ": " + e[1]).join('\n');
-        let total = Object.values(counts).reduce((a,b)=>a+b, 0);
-        let finalStr = "Total transactions: " + total + "\n\n" + res;
-        setTimeout(() => {
-            prompt("Scraping Complete! Copy your results:", finalStr);
-        }, 500);
-    }
-    
-    function loop() {
-        let trs = scrapeCurrentPage();
-        if(!trs) {
-            setTimeout(loop, 500);
-            return;
-        }
-        
-        let currentId = processRows(trs);
-        pageCount++;
-        let nextBtn = getNextBtn();
-        let disabled = false;
-        if(nextBtn) {
-            disabled = nextBtn.disabled || nextBtn.classList.contains('disabled') || nextBtn.getAttribute('aria-disabled')==='true';
-        }
-        if(nextBtn && !disabled && pageCount < 200) {
-            oldFirstId = currentId;
-            simClickBtn(nextBtn);
-            let checkInterval = setInterval(() => {
-                let trs2 = scrapeCurrentPage();
-                if(trs2) {
-                    let newId = trs2[0].children[0].textContent.trim();
-                    if(newId !== oldFirstId) {
-                        clearInterval(checkInterval);
-                        setTimeout(loop, 100);
-                    }
-                }
-            }, 200);
-            setTimeout(() => { clearInterval(checkInterval); }, 5000);
-        } else {
-            showPrompt();
-        }
-    }
-    waitAndStart(); // Start by waiting
+function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}
+function simClick(el){if(!el)return;el.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}
+function setVal(el,val){if(!el)return;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(el,val);else el.value=val;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new Event('blur',{bubbles:true}));}
+function doScopedSearch(refEl){if(refEl){let c=refEl.parentElement;while(c&&c!==document.body){let bs=Array.from(c.querySelectorAll('*')).filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0;});if(bs.length>0){let best=null;for(let i=bs.length-1;i>=0;i--){if(bs[i].tagName==='BUTTON'){best=bs[i];break;}}if(!best)best=bs[bs.length-1];if(best){let btn=best.closest('button,input,a,div[role="button"]')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}c=c.parentElement;}}return false;}
 
-function getFrames(){let docs=[document];let frames=document.querySelectorAll('iframe, frame');for(let f of frames){try{if(f.contentDocument||f.contentWindow.document)docs.push(f.contentDocument||f.contentWindow.document);}catch(e){}}return docs;}function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, input, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}function checkNotesAndMaybeResearch(activeTarget,tTab,attempts){attempts=attempts||0;for(let doc of getFrames()){if(!doc)continue;let tables=Array.from(doc.querySelectorAll('table'));let resTables=tables.filter(t=>Array.from(t.querySelectorAll('th')).some(th=>th.textContent.toLowerCase().trim()==='note'));let resTable=resTables.pop();if(resTable){let dataRows=Array.from(resTable.querySelectorAll('tbody tr')).filter(r=>r.children.length>=3);if(dataRows.length===0&&attempts<5){continue;}let allHaveAuto=false;if(dataRows.length>0){allHaveAuto=dataRows.every(r=>{let t=(r.textContent||'').toLowerCase();let inputs=Array.from(r.querySelectorAll('input, textarea')).map(i=>(i.value||'').toLowerCase()).join(' ');return (t+' '+inputs).includes('automatic');});}if(allHaveAuto&&dataRows.length>0){return;}let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){let valSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;if(valSetter)valSetter.call(select,'');else select.value='';let idxSetter=Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'selectedIndex').set;if(idxSetter)idxSetter.call(select,0);else select.selectedIndex=0;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let allElem=Array.from(doc.querySelectorAll('*'));let amtLabels=allElem.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let amtLabel=amtLabels.pop();if(amtLabel){let idx=allElem.indexOf(amtLabel);for(let i=idx+1;i<idx+30&&i<allElem.length;i++){if(allElem[i].tagName==='INPUT'&&allElem[i].getBoundingClientRect().width>0){let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(allElem[i],'-8.01');else allElem[i].value='-8.01';allElem[i].dispatchEvent(new Event('input',{bubbles:true}));allElem[i].dispatchEvent(new Event('change',{bubbles:true}));allElem[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}setTimeout(()=>{
-    let docs=getFrames(); let tmpDoc = docs.find(d=>d.querySelector('table'));
-    let preId = null;
-    if(tmpDoc) {
-        let trs = Array.from(tmpDoc.querySelectorAll('tbody tr')).filter(r=>r.children.length>5);
-        if(trs.length>0) preId = trs[0].children[0].textContent.trim();
-    }
-    doScopedSearch();
-    setTimeout(() => startScraping(preId), 500);
-},800);return;}}if(attempts<5){setTimeout(()=>{checkNotesAndMaybeResearch(activeTarget,tTab,attempts+1);},1000);}}let links=Array.from(document.querySelectorAll('a'));let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('notes'))return true;}return false;});if(!tTab){tTab=links.find(e=>e.textContent.toLowerCase().trim()==='transactions');}if(tTab){simClick(tTab);setTimeout(()=>{for(let doc of getFrames()){if(!doc)continue;let all=Array.from(doc.querySelectorAll('*'));let selects=Array.from(doc.querySelectorAll('select'));let selectsRev=selects.slice().reverse();for(let select of selectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){select.value=opt.value;select.selectedIndex=opt.index;select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let dLabel=dLabels.pop();if(dLabel){let idx=all.indexOf(dLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){let d=new Date();d.setMonth(d.getMonth()-1);let yy=d.getFullYear();let mm=String(d.getMonth()+1).padStart(2,'0');let dd=String(d.getDate()).padStart(2,'0');let val=`${yy}-${mm}-${dd} 00:00`;let setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(setter)setter.call(all[i],val);else all[i].value=val;all[i].dispatchEvent(new Event('input',{bubbles:true}));all[i].dispatchEvent(new Event('change',{bubbles:true}));all[i].dispatchEvent(new Event('blur',{bubbles:true}));break;}}}}setTimeout(()=>{doScopedSearch();setTimeout(()=>{checkNotesAndMaybeResearch(null,tTab,0);},5000);},1000);},3500);}})();"""
+function findNoteColIdx(doc){
+let tables=Array.from(doc.querySelectorAll('table'));
+let dataTbl=tables.find(t=>Array.from(t.querySelectorAll('th,td')).some(c=>c.textContent.toLowerCase().trim()==='note'));
+if(!dataTbl)return {tbl:null,idx:-1};
+let allTrs=Array.from(dataTbl.querySelectorAll('tr'));
+for(let tr of allTrs){
+let cells=Array.from(tr.children);
+let idx=cells.findIndex(c=>c.textContent.toLowerCase().trim()==='note');
+if(idx!==-1)return {tbl:dataTbl,idx:idx};
+}
+return {tbl:null,idx:-1};
+}
+
+function hasBlankInResults(){
+for(let doc of getFrames()){
+if(!doc)continue;
+let {tbl,idx}=findNoteColIdx(doc);
+if(!tbl||idx===-1)continue;
+let allTrs=Array.from(tbl.querySelectorAll('tr'));
+let headerFound=false;
+for(let tr of allTrs){
+let cells=Array.from(tr.children);
+if(!headerFound){
+if(cells.some(c=>c.textContent.toLowerCase().trim()==='note')){headerFound=true;continue;}
+continue;
+}
+if(cells.length>idx){
+let txt=cells[idx].textContent.trim().toLowerCase();
+if(txt===''||!txt.includes('automatic'))return true;
+}
+}
+}
+return false;
+}
+
+let links=Array.from(document.querySelectorAll('a'));
+let tTab=links.find(e=>{if(e.textContent.toLowerCase().trim()!=='transactions')return false;let idx=links.indexOf(e);let start=Math.max(0,idx-5);for(let i=start;i<idx;i++){if(links[i].textContent.toLowerCase().trim().startsWith('notes'))return true;}return false;});
+if(!tTab){tTab=links.find(e=>e.textContent.toLowerCase().trim()==='transactions');}
+
+if(tTab){
+simClick(tTab);
+setTimeout(()=>{
+let globalDLabel=null;
+let globalAmtLabel=null;
+let globalSelectsRev=[];
+let globalDoc=null;
+
+for(let doc of getFrames()){
+if(!doc)continue;
+let all=Array.from(doc.querySelectorAll('*'));
+let dLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='date from'||t==='date from *'||t==='date from:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});
+let dLabel=dLabels.pop();
+if(!dLabel)continue;
+globalDLabel=dLabel;
+globalDoc=doc;
+let idx=all.indexOf(dLabel);
+for(let i=idx+1;i<idx+30&&i<all.length;i++){
+if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){
+let d=new Date();d.setMonth(d.getMonth()-1);
+let val=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" 00:00";
+setVal(all[i],val);break;
+}
+}
+let selects=Array.from(doc.querySelectorAll('select'));
+globalSelectsRev=selects.slice().reverse();
+let amtLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='amount range in (to)'||t==='amount range in (to) *'||t==='amount range in (to):')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});
+globalAmtLabel=amtLabels.pop();
+break;
+}
+
+function setType(val){for(let select of globalSelectsRev){let opt=Array.from(select.options).find(o=>o.textContent.toLowerCase().trim().includes('redeem the bonus'));if(opt){if(val==='redeem'){select.value=opt.value;select.selectedIndex=opt.index;}else{select.value='';select.selectedIndex=0;}select.dispatchEvent(new Event('change',{bubbles:true}));select.dispatchEvent(new Event('input',{bubbles:true}));select.dispatchEvent(new Event('blur',{bubbles:true}));break;}}}
+function setAmt(val){if(!globalAmtLabel)return;let all=Array.from(globalAmtLabel.ownerDocument.querySelectorAll('*'));let idx=all.indexOf(globalAmtLabel);for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='INPUT'&&all[i].getBoundingClientRect().width>0){setVal(all[i],val);break;}}}
+
+setType('redeem');
+setAmt('');
+
+setTimeout(()=>{
+doScopedSearch(globalDLabel);
+
+setTimeout(()=>{
+if(hasBlankInResults()){
+setType('');
+setAmt('-8.01');
+setTimeout(()=>{doScopedSearch(globalDLabel);},600);
+}
+},4000);
+
+},1000);
+
+},3500);
+}else{
+alert("Could not find the Transactions tab!");
+}
+})();"""
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -562,10 +514,10 @@ function getFrames(){let docs=[document];let frames=document.querySelectorAll('i
                 pyautogui.press('enter')
                 print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
                 
-                print("[PLAYBISON] Waiting 10 seconds for transactions check to complete...")
-                time.sleep(10.0)
+                print("[PLAYBISON] Waiting 20 seconds for transactions check to complete...")
+                time.sleep(20.0)
                 
-                js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doExactSearch(){let allBtns=Array.from(document.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0&&b.children.length===0;});let best=searchBtns.pop();if(best){let btn=best.closest('button, a')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);}}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doExactSearch,800);}else{setTimeout(doExactSearch,800);}},3500);}})();"""
+                js_payment_log_macro = r"""(function(){function simClick(el){if(!el)return;el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));if(typeof el.click==='function')el.click();}function doScopedSearch(){for(let doc of getFrames()){if(!doc)continue;let allBtns=Array.from(doc.querySelectorAll('*'));let searchBtns=allBtns.filter(b=>{let t=(b.textContent||b.value||'').toLowerCase().trim();return t==='search'&&b.getBoundingClientRect().width>0;});let best=null;for(let i=searchBtns.length-1;i>=0;i--){if(searchBtns[i].tagName==='BUTTON'){best=searchBtns[i];break;}}if(!best&&searchBtns.length>0)best=searchBtns[searchBtns.length-1];if(best){let btn=best.closest('button, input, a, div[role="button"]')||best;if(btn.style)btn.style.border='3px solid red';simClick(btn);let form=btn.closest('form');if(form){try{form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));if(typeof form.submit==='function')form.submit();}catch(err){}}return true;}}return false;}let links=Array.from(document.querySelectorAll('a'));let pTab=links.find(e=>{return e.textContent.toLowerCase().trim()==='payment log'&&e.getBoundingClientRect().width>0;});if(pTab){simClick(pTab);setTimeout(()=>{let all=Array.from(document.querySelectorAll('*'));let sLabels=all.filter(e=>{if(e.tagName==='TH'||e.tagName==='TD')return false;let t=(e.textContent||'').toLowerCase().replace(/\s+/g,' ').trim();return (t==='status'||t==='status *'||t==='status:')&&e.getBoundingClientRect().width>0&&e.children.length<=2;});let sLabel=sLabels.pop();if(sLabel){let idx=all.indexOf(sLabel);let targetSelect=null;for(let i=idx+1;i<idx+30&&i<all.length;i++){if(all[i].tagName==='SELECT'){targetSelect=all[i];break;}}if(targetSelect){let changed=false;for(let o of targetSelect.options){let t=o.textContent.toLowerCase().trim();if(t==='pending'||t==='completed'){if(!o.selected){o.selected=true;changed=true;}}else{if(o.selected){o.selected=false;changed=true;}}}if(changed){targetSelect.dispatchEvent(new Event('change',{bubbles:true}));targetSelect.dispatchEvent(new Event('input',{bubbles:true}));}}setTimeout(doScopedSearch,800);}else{setTimeout(doScopedSearch,800);}},3500);}})();"""
                 pyperclip.copy(js_payment_log_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
