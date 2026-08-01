@@ -6,11 +6,11 @@ from macro_loader import load_macro
 
 pyautogui.FAILSAFE = False
 
-wallet_id = "fc355f0f7c3310a65da8b451"
+wallet_id = "3b7e6f77eec9bb129627a15d"
 url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
 
 print("============================================================")
-print("TESTING USER: lschilling@wp.pl (ID: 252078)")
+print("TESTING USER: kamil_rsl@poczta.fm (ID: 165398)")
 print("============================================================")
 print(f"[TEST] Opening wallet page: {url}...")
 webbrowser.open(url)

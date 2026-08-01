@@ -356,10 +356,7 @@ def main():
                     true_player_id = player_id
 
                 
-                # We must manually type 'javascript:' because Chrome strips it when pasted
-                # We also use dispatchEvent because some single-page apps ignore a basic .click()
-                # To avoid clicking the global "Notes" menu, we specifically look for the "notes" tab 
-                # that comes right after the "edit personal data" tab in the DOM.
+                # Step 1: Open Notes Tab
                 js_notes_macro = load_macro("ds_open_notes.js")
                 pyperclip.copy(js_notes_macro)
                 pyautogui.hotkey('ctrl', 'l')
@@ -371,10 +368,12 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Opened Notes tab.")
                 
-                print("[PLAYBISON] Waiting 6 seconds for notes data to load...")
-                time.sleep(6.0)
-                
+                print("[PLAYBISON] Waiting 5 seconds for notes data to load...")
+                time.sleep(5.0)
+
+                # Step 2: Transactions & Stack Check macro
                 js_trans_macro = load_macro("ds_check_transactions.js")
+                pyperclip.copy("WAITING_FOR_TRANS")
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -383,10 +382,23 @@ def main():
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
-                print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
+                print("[PLAYBISON] Executing Transactions & Stack Check Macro...")
                 
-                print("[PLAYBISON] Waiting 35 seconds for transactions check & multi-page stack pagination...")
-                time.sleep(35.0)
+                print("[PLAYBISON] Waiting for transactions check & multi-page stack pagination...")
+                trans_result = ""
+                for _ in range(35):
+                    time.sleep(1.0)
+                    clip_val = pyperclip.paste().strip()
+                    if clip_val and clip_val.startswith("TRANS_RESULT:"):
+                        trans_result = clip_val.replace("TRANS_RESULT:", "").strip()
+                        if trans_result in ["NO_STACK_FOUND", "AUTOMATIC_ALL", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
+                            print(f"[PLAYBISON] No stack found ({trans_result}). Continuing flow automatically...")
+                        else:
+                            print(f"\n{'='*60}\n[PLAYBISON] ⚠️ STACK TRANSACTIONS FOUND:\n{trans_result}\n{'='*60}\n")
+                            time.sleep(3.0)
+                        break
+                else:
+                    print("[PLAYBISON] Timeout or completed waiting for transactions macro, proceeding...")
                 
                 js_payment_log_macro = load_macro("ds_payment_log.js")
                 pyperclip.copy(js_payment_log_macro)

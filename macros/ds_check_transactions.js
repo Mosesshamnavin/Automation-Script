@@ -158,45 +158,52 @@
     return null;
   }
 
-  function findSearchButton(container) {
-    if (!container) return null;
-    let btns = Array.from(container.querySelectorAll('button, input, a, div[role="button"]'));
-    return btns.find(b => {
-      let t = (b.textContent || b.value || '').toLowerCase().trim();
-      return t === 'search' && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
-    });
+  function findSearchButtonForInput(inputEl, doc) {
+    if (inputEl) {
+      let p = inputEl.parentElement;
+      while (p && p !== (doc ? doc.body : null)) {
+        let btns = Array.from(p.querySelectorAll('button, input, a, div[role="button"]'));
+        let sBtn = btns.find(b => {
+          let t = (b.textContent || b.value || '').toLowerCase().trim();
+          return t === 'search' && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+        });
+        if (sBtn) return sBtn;
+        p = p.parentElement;
+      }
+    }
+    return findSearchButton(doc);
   }
 
   function findNoteColIdx(container) {
     if (!container) return { tbl: null, idx: -1 };
     let tables = Array.from(container.querySelectorAll('table'));
     let dataTbl = tables.find(t =>
-      Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim() === 'note')
+      Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim().includes('note'))
     );
     if (!dataTbl) return { tbl: null, idx: -1 };
     let allTrs = Array.from(dataTbl.querySelectorAll('tr'));
     for (let tr of allTrs) {
       let cells = Array.from(tr.children);
-      let idx = cells.findIndex(c => c.textContent.toLowerCase().trim() === 'note');
+      let idx = cells.findIndex(c => c.textContent.toLowerCase().trim().includes('note'));
       if (idx !== -1) return { tbl: dataTbl, idx: idx };
     }
     return { tbl: null, idx: -1 };
   }
 
   function hasBlankInResults(container) {
-    if (!container) return false;
+    if (!container) return true;
     let { tbl, idx } = findNoteColIdx(container);
-    if (!tbl || idx === -1) return false;
+    if (!tbl || idx === -1) return true;
 
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
     let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > idx);
 
-    if (dataRows.length > 0) {
-      for (let tr of dataRows) {
-        let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
-        if (txt === '' || !txt.includes('automatic')) {
-          return true;
-        }
+    if (dataRows.length === 0) return true;
+
+    for (let tr of dataRows) {
+      let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
+      if (txt === '' || !txt.includes('automatic')) {
+        return true;
       }
     }
     return false;
@@ -363,13 +370,17 @@
 
       for (let doc of getFrames()) {
         if (!doc) continue;
-        modalContainer = getActiveModalContainer(tTab, doc);
+        modalContainer = doc;
         dateInput = findDateFromInput(modalContainer);
+        if (!dateInput) {
+          modalContainer = getActiveModalContainer(tTab, doc);
+          dateInput = findDateFromInput(modalContainer);
+        }
         if (!dateInput) continue;
         targetDoc = doc;
         amtInput = findAmountInToInput(modalContainer);
         typeSelect = findTypeSelect(modalContainer);
-        searchBtn = findSearchButton(modalContainer);
+        searchBtn = findSearchButtonForInput(dateInput || typeSelect, doc);
         break;
       }
 
@@ -377,6 +388,9 @@
         let d = new Date(); d.setMonth(d.getMonth() - 1);
         let val = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
         setVal(dateInput, val);
+      } else {
+        copyToClipboard("TRANS_RESULT:NO_DATE_INPUT");
+        return;
       }
 
       if (typeSelect) {
@@ -391,13 +405,13 @@
 
         setTimeout(() => {
           let freshDoc = getFrames()[0];
-          let freshModal = getActiveModalContainer(tTab, freshDoc);
+          let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
           let blankFound = hasBlankInResults(freshModal);
 
           if (blankFound) {
-            let freshTypeSelect = findTypeSelect(freshModal);
-            let freshAmtInput = findAmountInToInput(freshModal);
-            let freshSearchBtn = findSearchButton(freshModal);
+            let freshTypeSelect = findTypeSelect(freshModal) || findTypeSelect(freshDoc);
+            let freshAmtInput = findAmountInToInput(freshModal) || findAmountInToInput(freshDoc);
+            let freshSearchBtn = findSearchButtonForInput(freshAmtInput || freshTypeSelect, freshDoc);
 
             if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
             if (freshAmtInput) setVal(freshAmtInput, '-8.01');
@@ -405,20 +419,21 @@
             setTimeout(() => {
               if (freshSearchBtn) simClick(freshSearchBtn);
               setTimeout(() => {
-                let liveModal = getActiveModalContainer(tTab, getFrames()[0]);
+                let liveDoc = getFrames()[0];
+                let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
                 computeAllPagesStack(liveModal, function(stackResult) {
-                  copyToClipboard(stackResult);
+                  let resText = stackResult || "NO_STACK_FOUND";
+                  copyToClipboard("TRANS_RESULT:" + resText);
                   if (stackResult) {
                     prompt("POLAND TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
-                  } else {
-                    alert("NO STACK TRANSACTIONS FOUND FOR -8.01 WITH DIFFERING BONUS");
                   }
                 });
               }, 4500);
             }, 800);
           } else {
             computeAllPagesStack(freshModal, function(stackResult) {
-              copyToClipboard(stackResult);
+              let resText = stackResult || "AUTOMATIC_ALL";
+              copyToClipboard("TRANS_RESULT:" + resText);
               if (stackResult) {
                 prompt("TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
               }
@@ -430,6 +445,6 @@
 
     }, 3500);
   } else {
-    alert("Could not find the Transactions tab!");
+    copyToClipboard("TRANS_RESULT:NO_TRANSACTIONS_TAB");
   }
 })();

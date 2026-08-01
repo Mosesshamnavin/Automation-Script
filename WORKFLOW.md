@@ -35,17 +35,18 @@ oles column does not contain VIP).
 4. Reads the **W/D ratio (volumes)** cell.
 
 ## Part 4: Wallet Verification, Notes & Transactions
-1. **Wallet Navigation & Notes Tab:**
-   - Directly opens the user's wallet profile in a new tab using the wallet_id extracted earlier (bypassing the need to switch back to the original table tab).
-   - Waits for wallet profile to load, then automatically clicks the **
-otes** tab.
+1. **Wallet Navigation & Profile Extraction:**
+   - Directly opens the user's wallet profile in a new tab using the `wallet_id` extracted earlier.
+   - Extracts true Player ID and Name from the wallet profile.
+   - Automatically clicks the **Notes** tab and waits for notes data to load.
 2. **Transactions Tab Check:**
-   - Finds the **	ransactions** tab and automatically switches to it.
+   - Automatically switches to the **Transactions** tab.
    - Selects **Redeem the bonuses** in the Type dropdown and sets Date From to **1 month ago**.
-   - Inspects the 
-ote column across all result rows.
-   - If all rows have the text "automatic", it skips further analysis.
-   - If any row lacks "automatic", it clears the type filter, sets Amount Range In (To) to **-8.01** and clicks Search again.
+   - Inspects the Note column across all result rows.
+   - If all rows have the text "automatic", it skips further stack analysis and sends completion signal (`AUTOMATIC_ALL`) to Python.
+   - If any row lacks "automatic", it clears the type filter, sets Amount Range In (To) to **-8.01** and clicks Search again to calculate stack count across all pagination pages.
+   - If no stack transactions are found, no alert dialog is shown in Chrome; the script continues automatically.
+   - If stack transactions are found, a prompt dialog appears displaying the stack count breakdown for user review.
 3. **Payment Log Validation:**
    - Switches to the **payment log** tab.
    - Automatically selects both **Pending** and **Completed** options and searches.
