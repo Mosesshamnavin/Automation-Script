@@ -23,49 +23,153 @@
 
   function setVal(el, val) {
     if (!el) return;
+    try { el.focus(); } catch (e) {}
     let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     if (setter) setter.call(el, val); else el.value = val;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('keyup', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
+
+  function setSelectVal(el, optionIndexOrVal) {
+    if (!el) return;
+    try { el.focus(); } catch (e) {}
+    if (typeof optionIndexOrVal === 'number') {
+      el.selectedIndex = optionIndexOrVal;
+      if (el.options && el.options[optionIndexOrVal]) {
+        let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        if (setter) setter.call(el, el.options[optionIndexOrVal].value);
+        else el.value = el.options[optionIndexOrVal].value;
+      }
+    } else {
+      let opt = Array.from(el.options || []).find(o => o.value === optionIndexOrVal || o.textContent.toLowerCase().trim().includes(optionIndexOrVal.toLowerCase()));
+      if (opt) {
+        el.selectedIndex = opt.index;
+        let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        if (setter) setter.call(el, opt.value);
+        else el.value = opt.value;
+      } else {
+        el.selectedIndex = 0;
+        let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+        if (setter && el.options && el.options.length > 0) setter.call(el, el.options[0].value);
+        else el.value = '';
+      }
+    }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
   }
 
-  function doScopedSearch(refEl) {
-    if (refEl) {
-      let c = refEl.parentElement;
-      while (c && c !== document.body) {
-        let bs = Array.from(c.querySelectorAll('*')).filter(b => {
-          let t = (b.textContent || b.value || '').toLowerCase().trim();
-          return t === 'search' && b.getBoundingClientRect().width > 0;
-        });
-        if (bs.length > 0) {
-          let best = null;
-          for (let i = bs.length - 1; i >= 0; i--) {
-            if (bs[i].tagName === 'BUTTON') { best = bs[i]; break; }
-          }
-          if (!best) best = bs[bs.length - 1];
-          if (best) {
-            let btn = best.closest('button,input,a,div[role="button"]') || best;
-            if (btn.style) btn.style.border = '3px solid red';
-            simClick(btn);
-            let form = btn.closest('form');
-            if (form) {
-              try {
-                form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-                if (typeof form.submit === 'function') form.submit();
-              } catch (err) {}
-            }
-            return true;
-          }
+  function getActiveModalContainer(tTab, doc) {
+    if (tTab) {
+      let p = tTab.parentElement;
+      while (p && p !== doc.body) {
+        let inputs = p.querySelectorAll('input');
+        if (inputs.length >= 4) {
+          return p;
         }
-        c = c.parentElement;
+        p = p.parentElement;
       }
     }
-    return false;
+    return doc;
   }
 
-  function findNoteColIdx(doc) {
-    let tables = Array.from(doc.querySelectorAll('table'));
+  function findDateFromInput(container) {
+    if (!container) return null;
+    let inputs = Array.from(container.querySelectorAll('input'));
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let p = inp.parentElement;
+      for (let level = 0; level < 5 && p && p !== container; level++) {
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if ((t.includes('date from') || (t.includes('date') && t.includes('from'))) && !t.includes('date to') && !t.includes('registered')) {
+          let childInputs = p.querySelectorAll('input');
+          if (childInputs.length <= 2) return inp;
+        }
+        p = p.parentElement;
+      }
+    }
+    return null;
+  }
+
+  function findAmountInToInput(container) {
+    if (!container) return null;
+    let inputs = Array.from(container.querySelectorAll('input'));
+
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+
+      let attrStr = (
+        (inp.placeholder || '') + ' ' +
+        (inp.name || '') + ' ' +
+        (inp.id || '') + ' ' +
+        (inp.getAttribute('ng-model') || '') + ' ' +
+        (inp.getAttribute('formcontrolname') || '') + ' ' +
+        (inp.getAttribute('aria-label') || '')
+      ).toLowerCase();
+
+      if (attrStr.includes('in') && attrStr.includes('to') && !attrStr.includes('out') && !attrStr.includes('from')) {
+        return inp;
+      }
+
+      let p = inp.parentElement;
+      for (let level = 0; level < 5 && p && p !== container; level++) {
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (t.includes('amount') && t.includes('in') && t.includes('to') && !t.includes('out') && !t.includes('from')) {
+          let childInputs = p.querySelectorAll('input');
+          if (childInputs.length <= 2) return inp;
+        }
+        p = p.parentElement;
+      }
+    }
+
+    let amountInputs = inputs.filter(inp => {
+      let p = inp.parentElement;
+      while (p && p !== container) {
+        let t = (p.textContent || '').toLowerCase();
+        if (t.includes('amount')) return true;
+        p = p.parentElement;
+      }
+      return false;
+    });
+
+    if (amountInputs.length >= 4) {
+      return amountInputs[3];
+    }
+    return null;
+  }
+
+  function findTypeSelect(container) {
+    if (!container) return null;
+    let selects = Array.from(container.querySelectorAll('select'));
+    for (let sel of selects) {
+      if (sel.offsetWidth === 0 && sel.getBoundingClientRect().width === 0) continue;
+      let p = sel.parentElement;
+      for (let level = 0; level < 5 && p && p !== container; level++) {
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if ((t.includes('type') && !t.includes('product')) || t === 'type') {
+          let childSelects = p.querySelectorAll('select');
+          if (childSelects.length <= 2) return sel;
+        }
+        p = p.parentElement;
+      }
+    }
+    return null;
+  }
+
+  function findSearchButton(container) {
+    if (!container) return null;
+    let btns = Array.from(container.querySelectorAll('button, input, a, div[role="button"]'));
+    return btns.find(b => {
+      let t = (b.textContent || b.value || '').toLowerCase().trim();
+      return t === 'search' && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+    });
+  }
+
+  function findNoteColIdx(container) {
+    if (!container) return { tbl: null, idx: -1 };
+    let tables = Array.from(container.querySelectorAll('table'));
     let dataTbl = tables.find(t =>
       Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim() === 'note')
     );
@@ -79,26 +183,160 @@
     return { tbl: null, idx: -1 };
   }
 
-  function hasBlankInResults() {
-    for (let doc of getFrames()) {
-      if (!doc) continue;
-      let { tbl, idx } = findNoteColIdx(doc);
-      if (!tbl || idx === -1) continue;
-      let allTrs = Array.from(tbl.querySelectorAll('tr'));
-      let headerFound = false;
-      for (let tr of allTrs) {
-        let cells = Array.from(tr.children);
-        if (!headerFound) {
-          if (cells.some(c => c.textContent.toLowerCase().trim() === 'note')) { headerFound = true; continue; }
-          continue;
-        }
-        if (cells.length > idx) {
-          let txt = cells[idx].textContent.trim().toLowerCase();
-          if (txt === '' || !txt.includes('automatic')) return true;
+  function hasBlankInResults(container) {
+    if (!container) return false;
+    let { tbl, idx } = findNoteColIdx(container);
+    if (!tbl || idx === -1) return false;
+
+    let allTrs = Array.from(tbl.querySelectorAll('tr'));
+    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > idx);
+
+    if (dataRows.length > 0) {
+      for (let tr of dataRows) {
+        let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
+        if (txt === '' || !txt.includes('automatic')) {
+          return true;
         }
       }
     }
     return false;
+  }
+
+  function computeAllPagesStack(container, doneCallback) {
+    let globalCounts = {};
+    let seenIds = new Set();
+
+    function parseCurrentPage(cont) {
+      let tables = Array.from(cont.querySelectorAll('table'));
+      let dataTbl = tables.find(t =>
+        Array.from(t.querySelectorAll('th,td')).some(c => {
+          let txt = c.textContent.toLowerCase().trim();
+          return txt === 'out val' || txt === 'in val' || txt === 'wallet id';
+        })
+      );
+      if (!dataTbl) return;
+
+      let allTrs = Array.from(dataTbl.querySelectorAll('tr'));
+      let valIdx = -1;
+      let currIdx = -1;
+      let bonusBeforeIdx = -1;
+      let bonusAfterIdx = -1;
+
+      for (let tr of allTrs) {
+        let cells = Array.from(tr.children);
+        for (let i = 0; i < cells.length; i++) {
+          let txt = cells[i].textContent.toLowerCase().trim();
+          if (txt === 'val' || txt === 'out val' || txt === 'in val') {
+            if (i + 1 < cells.length && (cells[i+1].textContent.toLowerCase().trim() === 'curr' || cells[i+1].textContent.toLowerCase().trim() === 'currency')) {
+              valIdx = i;
+              currIdx = i + 1;
+            }
+          }
+          if (txt === 'before' && i > 10) {
+            bonusBeforeIdx = i;
+            if (i + 1 < cells.length) bonusAfterIdx = i + 1;
+          }
+        }
+        if (valIdx !== -1 && bonusBeforeIdx !== -1) break;
+      }
+
+      if (valIdx === -1) {
+        valIdx = 6;
+        currIdx = 7;
+      }
+
+      if (bonusBeforeIdx === -1) {
+        bonusBeforeIdx = 13;
+        bonusAfterIdx = 14;
+      }
+
+      let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(currIdx, bonusAfterIdx));
+
+      for (let tr of dataRows) {
+        let idStr = tr.children[0] ? tr.children[0].textContent.trim() : '';
+        if (!/^\d{6,15}$/.test(idStr)) continue;
+
+        if (seenIds.has(idStr)) continue;
+        seenIds.add(idStr);
+
+        let bonusBeforeStr = tr.children.length > bonusBeforeIdx ? tr.children[bonusBeforeIdx].textContent.trim() : '0';
+        let bonusAfterStr = tr.children.length > bonusAfterIdx ? tr.children[bonusAfterIdx].textContent.trim() : '0';
+
+        let bBefore = parseFloat(bonusBeforeStr.replace(',', '.')) || 0;
+        let bAfter = parseFloat(bonusAfterStr.replace(',', '.')) || 0;
+
+        // RULE: If bonus before AND bonus after have the SAME value, SKIP THIS ROW!
+        // Only count rows where bonus before and bonus after values DIFFER!
+        if (bBefore === bAfter) {
+          continue;
+        }
+
+        let valStr = tr.children[valIdx].textContent.trim();
+        let currStr = tr.children[currIdx].textContent.trim();
+
+        if (!valStr) continue;
+
+        let num = parseFloat(valStr.replace(',', '.'));
+        if (isNaN(num)) continue;
+
+        let currFormatted = currStr ? currStr.charAt(0).toUpperCase() + currStr.slice(1).toLowerCase() : '';
+        let absVal = Math.abs(num);
+        let valFormatted = `-${absVal}`;
+
+        if (valFormatted.endsWith('.00')) {
+          valFormatted = valFormatted.slice(0, -3);
+        }
+
+        let key = `${valFormatted}${currFormatted}`;
+        globalCounts[key] = (globalCounts[key] || 0) + 1;
+      }
+    }
+
+    function findNextButton(cont) {
+      let btns = Array.from(cont.querySelectorAll('button, a, input, div[role="button"], li'));
+      return btns.find(b => {
+        let txt = (b.textContent || b.value || '').toLowerCase().trim();
+        let isNext = txt === 'next' || txt.includes('next') || txt === 'next→' || txt === 'next →' || txt === '→';
+        let isDisabled = b.disabled || b.classList.contains('disabled') || b.parentElement.classList.contains('disabled');
+        return isNext && !isDisabled && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+      });
+    }
+
+    function step() {
+      let liveDoc = getFrames()[0];
+      let liveModal = container ? container : liveDoc;
+      parseCurrentPage(liveModal);
+
+      let nextBtn = findNextButton(liveModal);
+      if (nextBtn) {
+        simClick(nextBtn);
+        setTimeout(() => {
+          step();
+        }, 3000);
+      } else {
+        let keys = Object.keys(globalCounts).sort((a, b) => {
+          let numA = Math.abs(parseFloat(a) || 0);
+          let numB = Math.abs(parseFloat(b) || 0);
+          return numB - numA;
+        });
+
+        let resultLines = keys.map(k => `${k}*${globalCounts[k]}`);
+        doneCallback(resultLines.join('\n'));
+      }
+    }
+
+    step();
+  }
+
+  function copyToClipboard(text) {
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {}
   }
 
   let links = Array.from(document.querySelectorAll('a'));
@@ -116,83 +354,80 @@
   if (tTab) {
     simClick(tTab);
     setTimeout(() => {
-      let globalDLabel = null;
-      let globalAmtLabel = null;
-      let globalSelectsRev = [];
-      let globalDoc = null;
+      let targetDoc = null;
+      let modalContainer = null;
+      let dateInput = null;
+      let amtInput = null;
+      let typeSelect = null;
+      let searchBtn = null;
 
       for (let doc of getFrames()) {
         if (!doc) continue;
-        let all = Array.from(doc.querySelectorAll('*'));
-        let dLabels = all.filter(e => {
-          if (e.tagName === 'TH' || e.tagName === 'TD') return false;
-          let t = (e.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
-          return (t === 'date from' || t === 'date from *' || t === 'date from:') &&
-            e.getBoundingClientRect().width > 0 && e.children.length <= 2;
-        });
-        let dLabel = dLabels.pop();
-        if (!dLabel) continue;
-        globalDLabel = dLabel;
-        globalDoc = doc;
-
-        let idx = all.indexOf(dLabel);
-        for (let i = idx + 1; i < idx + 30 && i < all.length; i++) {
-          if (all[i].tagName === 'INPUT' && all[i].getBoundingClientRect().width > 0) {
-            let d = new Date(); d.setMonth(d.getMonth() - 1);
-            let val = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
-            setVal(all[i], val); break;
-          }
-        }
-
-        let selects = Array.from(doc.querySelectorAll('select'));
-        globalSelectsRev = selects.slice().reverse();
-
-        let amtLabels = all.filter(e => {
-          if (e.tagName === 'TH' || e.tagName === 'TD') return false;
-          let t = (e.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
-          return (t === 'amount range in (to)' || t === 'amount range in (to) *' || t === 'amount range in (to):') &&
-            e.getBoundingClientRect().width > 0 && e.children.length <= 2;
-        });
-        globalAmtLabel = amtLabels.pop();
+        modalContainer = getActiveModalContainer(tTab, doc);
+        dateInput = findDateFromInput(modalContainer);
+        if (!dateInput) continue;
+        targetDoc = doc;
+        amtInput = findAmountInToInput(modalContainer);
+        typeSelect = findTypeSelect(modalContainer);
+        searchBtn = findSearchButton(modalContainer);
         break;
       }
 
-      function setType(val) {
-        for (let select of globalSelectsRev) {
-          let opt = Array.from(select.options).find(o => o.textContent.toLowerCase().trim().includes('redeem the bonus'));
-          if (opt) {
-            if (val === 'redeem') { select.value = opt.value; select.selectedIndex = opt.index; }
-            else { select.value = ''; select.selectedIndex = 0; }
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-            select.dispatchEvent(new Event('input', { bubbles: true }));
-            select.dispatchEvent(new Event('blur', { bubbles: true }));
-            break;
-          }
-        }
+      if (dateInput) {
+        let d = new Date(); d.setMonth(d.getMonth() - 1);
+        let val = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
+        setVal(dateInput, val);
       }
 
-      function setAmt(val) {
-        if (!globalAmtLabel) return;
-        let all = Array.from(globalAmtLabel.ownerDocument.querySelectorAll('*'));
-        let idx = all.indexOf(globalAmtLabel);
-        for (let i = idx + 1; i < idx + 30 && i < all.length; i++) {
-          if (all[i].tagName === 'INPUT' && all[i].getBoundingClientRect().width > 0) { setVal(all[i], val); break; }
-        }
+      if (typeSelect) {
+        setSelectVal(typeSelect, 'redeem the bonus');
       }
-
-      setType('redeem');
-      setAmt('');
+      if (amtInput) {
+        setVal(amtInput, '');
+      }
 
       setTimeout(() => {
-        doScopedSearch(globalDLabel);
+        if (searchBtn) simClick(searchBtn);
+
         setTimeout(() => {
-          if (hasBlankInResults()) {
-            setType('');
-            setAmt('-8.01');
-            setTimeout(() => { doScopedSearch(globalDLabel); }, 600);
+          let freshDoc = getFrames()[0];
+          let freshModal = getActiveModalContainer(tTab, freshDoc);
+          let blankFound = hasBlankInResults(freshModal);
+
+          if (blankFound) {
+            let freshTypeSelect = findTypeSelect(freshModal);
+            let freshAmtInput = findAmountInToInput(freshModal);
+            let freshSearchBtn = findSearchButton(freshModal);
+
+            if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
+            if (freshAmtInput) setVal(freshAmtInput, '-8.01');
+
+            setTimeout(() => {
+              if (freshSearchBtn) simClick(freshSearchBtn);
+              setTimeout(() => {
+                let liveModal = getActiveModalContainer(tTab, getFrames()[0]);
+                computeAllPagesStack(liveModal, function(stackResult) {
+                  copyToClipboard(stackResult);
+                  if (stackResult) {
+                    prompt("POLAND TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
+                  } else {
+                    alert("NO STACK TRANSACTIONS FOUND FOR -8.01 WITH DIFFERING BONUS");
+                  }
+                });
+              }, 4500);
+            }, 800);
+          } else {
+            computeAllPagesStack(freshModal, function(stackResult) {
+              copyToClipboard(stackResult);
+              if (stackResult) {
+                prompt("TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
+              }
+            });
           }
-        }, 4000);
+        }, 4500);
+
       }, 1000);
+
     }, 3500);
   } else {
     alert("Could not find the Transactions tab!");

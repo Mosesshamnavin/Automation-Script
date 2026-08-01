@@ -385,8 +385,8 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Checked notes & transactions with 'Redeem the bonuses'. Validated note column for 'automatic'.")
                 
-                print("[PLAYBISON] Waiting 20 seconds for transactions check to complete...")
-                time.sleep(20.0)
+                print("[PLAYBISON] Waiting 35 seconds for transactions check & multi-page stack pagination...")
+                time.sleep(35.0)
                 
                 js_payment_log_macro = load_macro("ds_payment_log.js")
                 pyperclip.copy(js_payment_log_macro)
