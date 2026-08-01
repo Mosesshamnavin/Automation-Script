@@ -339,10 +339,19 @@
     try {
       let ta = document.createElement('textarea');
       ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0.01';
       document.body.appendChild(ta);
       ta.select();
+      ta.focus();
       document.execCommand('copy');
-      document.body.removeChild(ta);
+      // Intentionally leave the textarea in the DOM and focused
+      // so that Python's Ctrl+C loop can successfully copy it.
+      setTimeout(() => {
+        try { document.body.removeChild(ta); } catch(e){}
+      }, 30000);
     } catch (e) {}
   }
 
@@ -424,9 +433,6 @@
                 computeAllPagesStack(liveModal, function(stackResult) {
                   let resText = stackResult || "NO_STACK_FOUND";
                   copyToClipboard("TRANS_RESULT:" + resText);
-                  if (stackResult) {
-                    prompt("POLAND TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
-                  }
                 });
               }, 4500);
             }, 800);
@@ -434,9 +440,6 @@
             computeAllPagesStack(freshModal, function(stackResult) {
               let resText = stackResult || "AUTOMATIC_ALL";
               copyToClipboard("TRANS_RESULT:" + resText);
-              if (stackResult) {
-                prompt("TRANSACTION STACK COUNT (DIFFERING BONUS ONLY):\nCopy with Ctrl+C:", stackResult);
-              }
             });
           }
         }, 4500);

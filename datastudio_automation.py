@@ -387,6 +387,7 @@ def main():
                 print("[PLAYBISON] Waiting for transactions check & multi-page stack pagination...")
                 trans_result = ""
                 for _ in range(35):
+                    pyautogui.hotkey('ctrl', 'c')
                     time.sleep(1.0)
                     clip_val = pyperclip.paste().strip()
                     if clip_val and clip_val.startswith("TRANS_RESULT:"):
