@@ -16,7 +16,32 @@
     if (typeof el.click === 'function') el.click();
   }
 
-  function doScopedSearch() {
+  function doScopedSearch(refNode) {
+    if (refNode) {
+      let p = refNode.parentElement;
+      while (p && p !== document.body) {
+        let btns = Array.from(p.querySelectorAll('button, input, a, div[role="button"]'));
+        let sBtn = btns.find(b => {
+          let t = (b.textContent || b.value || '').toLowerCase().trim();
+          return t === 'search' && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+        });
+        if (sBtn) {
+          let btn = sBtn.closest('button, input, a, div[role="button"]') || sBtn;
+          if (btn.style) btn.style.border = '3px solid red';
+          simClick(btn);
+          let form = btn.closest('form');
+          if (form) {
+            try {
+              form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+              if (typeof form.submit === 'function') form.submit();
+            } catch (err) {}
+          }
+          return true;
+        }
+        p = p.parentElement;
+      }
+    }
+
     for (let doc of getFrames()) {
       if (!doc) continue;
       let allBtns = Array.from(doc.querySelectorAll('*'));
@@ -84,9 +109,9 @@
             targetSelect.dispatchEvent(new Event('input', { bubbles: true }));
           }
         }
-        setTimeout(doScopedSearch, 800);
+        setTimeout(() => doScopedSearch(targetSelect || sLabel), 800);
       } else {
-        setTimeout(doScopedSearch, 800);
+        setTimeout(() => doScopedSearch(null), 800);
       }
     }, 3500);
   }
