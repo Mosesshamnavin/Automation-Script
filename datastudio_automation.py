@@ -430,189 +430,75 @@ def main():
                 time.sleep(1.0)
                 dep_res = pyperclip.paste().strip()
                 last_deposit_id = ""
+                last_deposit_op = playbison_op
                 if dep_res.startswith("DEP_ID:"):
-                    last_deposit_id = dep_res.replace("DEP_ID:", "").strip()
+                    parts = dep_res.replace("DEP_ID:", "").split("|OP:")
+                    last_deposit_id = parts[0].strip()
+                    if len(parts) > 1:
+                        if parts[1].strip() != "NO_MATCH":
+                            last_deposit_op = parts[1].strip()
+                    
                     if last_deposit_id != "NOT_FOUND":
-                        print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id}")
+                        print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
                     else:
-                        print(f"[PLAYBISON] Could not find a DEPOSIT row in the Payment Log.")
+                        print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
                 
                 # Use the true player_id extracted from the wallet page
                 extracted_id = true_player_id
                 
                 if extracted_id and extracted_id.isdigit():
-                    print(f"[PLAYBISON] Using Player ID for PaymentIQ search: {extracted_id}")
+                    print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
+                    from datetime import datetime
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
-                    target_url = "https://backoffice.paymentiq.io/#/user-accounts"
-                    print(f"[PAYMENTIQ] Opening {target_url} in a new tab...")
-                    pyperclip.copy(target_url)
-                    pyautogui.hotkey('ctrl', 't')
-                    time.sleep(0.5)
-                    pyautogui.hotkey('ctrl', 'v')
-                    time.sleep(0.3)
-                    pyautogui.press('enter')
+                    # Ensure ratio_val is formatted, or fallback to raw
+                    ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
                     
-                    print("[PAYMENTIQ] Waiting 8 seconds for page to load...")
-                    time.sleep(8.0)
+                    # Columns A to J separated by Tabs
+                    trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
+                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}"
+                    pyperclip.copy(row_data)
                     
-                    # Verify we aren't on the login page to avoid locking the account
-                    js_check_login = load_macro("piq_check_login.js")
+                    target_url = "https://docs.google.com/spreadsheets/d/1n-VC5cQAxhi2a2yC0VPWWSLRWg6NEQsKNv35UZoGbqI/edit?pli=1&gid=0#gid=0"
+                    print(f"[GOOGLE SHEETS] Opening {target_url} in a new tab...")
                     
-                    pyperclip.copy('WAITING')
-                    pyperclip.copy(js_check_login)
-                    pyautogui.hotkey('ctrl', 'l')
-                    time.sleep(0.3)
-                    pyautogui.write('javascript:')
-                    time.sleep(0.2)
-                    pyautogui.hotkey('ctrl', 'v')
-                    time.sleep(0.3)
-                    pyautogui.press('enter')
+                    # Open Google Sheets
+                    webbrowser.open_new_tab(target_url)
                     
+                    print("[GOOGLE SHEETS] Waiting 10 seconds for Google Sheets to fully load...")
+                    time.sleep(10.0)
+                    
+                    print("[GOOGLE SHEETS] Navigating to the next empty row...")
+                    # Go to the bottom right of the sheet
+                    pyautogui.hotkey('ctrl', 'end')
                     time.sleep(1.0)
-                    login_status = pyperclip.paste().strip()
-                    if login_status == "LOGGED_OUT:YES":
-                        print("\n[ERROR] PaymentIQ is logged out (auth portal detected)!")
-                        print("[ERROR] Stopping workflow to prevent account lockout.")
-                        print("[MAIN] Please log into PaymentIQ manually and restart the script.")
-                        return
                     
-                    js_piq_macro = load_macro("piq_search_user.js", PLAYER_ID=extracted_id)
+                    # Go to the first column (Column A) of the bottom row
+                    pyautogui.press('home')
+                    time.sleep(1.0)
                     
-                    pyperclip.copy(js_piq_macro)
-                    pyautogui.hotkey('ctrl', 'l')
-                    time.sleep(0.3)
-                    pyautogui.write('javascript:')
-                    time.sleep(0.2)
+                    # Go UP to the last filled row in Column A
+                    pyautogui.hotkey('ctrl', 'up')
+                    time.sleep(1.0)
+                    
+                    # Go DOWN one cell to the next empty row
+                    pyautogui.press('down')
+                    time.sleep(1.0)
+                    
+                    print("[GOOGLE SHEETS] Pasting data into the new row...")
                     pyautogui.hotkey('ctrl', 'v')
-                    time.sleep(0.3)
+                    time.sleep(1.0)
+                    
+                    # Press Enter to finalize paste
                     pyautogui.press('enter')
-                    print(f"[PAYMENTIQ] Searched for user{extracted_id}")
+                    time.sleep(0.5)
                     
-                    print("[PAYMENTIQ] Waiting 8 seconds for search results to load...")
-                    time.sleep(8.0)
-                    
-                    js_piq_check = load_macro("piq_check_results.js")
-                    
-                    pyperclip.copy('')
-                    pyperclip.copy(js_piq_check)
-                    pyautogui.hotkey('ctrl', 'l')
-                    time.sleep(0.3)
-                    pyautogui.write('javascript:')
-                    time.sleep(0.2)
-                    pyautogui.hotkey('ctrl', 'v')
-                    time.sleep(0.3)
-                    pyautogui.press('enter')
-                    
-                    time.sleep(1.5)
-                    piq_res = pyperclip.paste().strip()
-                    
-                    if "HOLDER:" in piq_res and "|SUCCESS:" in piq_res:
-                        parts1 = piq_res.replace("HOLDER:", "").split("|SUCCESS:")
-                        piq_holder = parts1[0].strip()
-                        rest = parts1[1].strip()
-                        
-                        piq_account = ""
-                        if "|ACCOUNT:" in rest:
-                            parts2 = rest.split("|ACCOUNT:")
-                            piq_success = parts2[0].strip()
-                            piq_account = parts2[1].strip()
-                        else:
-                            piq_success = rest
-                        
-                        print(f"\n[PAYMENTIQ] Extraction Result - Holder: '{piq_holder}', Last Success: '{piq_success}', Account: '{piq_account}'")
-                        
-                        import unicodedata
-                        def normalize(s):
-                            return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode('utf-8').lower().strip()
-                        
-                        if normalize(true_player_name) == normalize(piq_holder) and piq_holder:
-                            print(f"[CHECK] ✅ Name Match: '{true_player_name}' matches PaymentIQ '{piq_holder}'")
-                        else:
-                            print(f"[CHECK] ❌ Name MISMATCH! Playbison: '{true_player_name}' vs PaymentIQ: '{piq_holder}'")
-                            
-                        if piq_success:
-                            from datetime import datetime, timedelta
-                            try:
-                                date_str = piq_success[:10]
-                                success_date = datetime.strptime(date_str, "%Y-%m-%d")
-                                ninety_days_ago = datetime.now() - timedelta(days=90)
-                                if success_date >= ninety_days_ago:
-                                    print(f"[CHECK] ✅ Last Success ({date_str}) is within the last 3 months!")
-                                else:
-                                    print(f"[CHECK] ❌ Last Success ({date_str}) is OLDER than 3 months!")
-                            except Exception as e:
-                                print(f"[CHECK] ⚠️ Could not parse date '{piq_success}': {e}")
-                        else:
-                            print("[CHECK] ❌ No Last Success date found in PaymentIQ table (User has no successful deposits/withdrawals here?)")
-                            
-                        import unicodedata
-                        def normalize(s):
-                            return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode('utf-8').lower().strip()
-                            
-                        is_cc = piq_account and ("*" in piq_account or "x" in piq_account.lower())
-                        names_match = (normalize(true_player_name) == normalize(piq_holder))
-                        
-                        note_text = ""
-                        if not names_match and not is_cc:
-                            # Condition 1
-                            note_text = f"wd {extracted_id} cancelled, 3rd party \"{piq_holder}\" / Req last dep {last_deposit_id}"
-                        elif not names_match and is_cc:
-                            # Condition 2
-                            note_text = f"wd {extracted_id} cancelled, req confirmation of card ownership {piq_account}"
-                        elif ratio_val is not None and ratio_val >= 25.0:
-                            # Condition 3
-                            note_text = f"wd {extracted_id} cancelled, req dep {last_deposit_id}, w/d ratio is {ratio_val}%"
-                        elif is_cc:
-                            # Condition 4
-                            op_upper = playbison_op.upper()
-                            if "APPLE PAY" in op_upper or "APPLE" in op_upper:
-                                if "BITEXPRO" in op_upper:
-                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT BITEXPRO APPLE PAY"
-                                elif "BANK" in op_upper:
-                                    note_text = f"wd {extracted_id} cancelled, Req APPLE PAY BANK"
-                                elif "ARI10" in op_upper:
-                                    note_text = f"wd {extracted_id} cancelled, Req ARI10 APPLE"
-                                else:
-                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT APPLE PAY"
-                            elif "GOOGLE PAY" in op_upper or "GOOGLE" in op_upper:
-                                if "BITEXPRO" in op_upper:
-                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT BITEXPRO GOOGLE PAY"
-                                elif "ARI10" in op_upper:
-                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT ARI10 GOOGLE"
-                                else:
-                                    note_text = f"wd {extracted_id} cancelled, Req WEBREDIRECT GOOGLE PAY"
-                            else:
-                                note_text = f"wd {extracted_id} cancelled, Req CC {piq_account}"
-                                
-                        if note_text:
-                            print(f"\n[CANCELLATION NOTE] Generated: '{note_text}'")
-                            print("[PLAYBISON] Switching back to Playbison to inject note...")
-                            # Switch back to Playbison Wallet tab
-                            pyautogui.hotkey('ctrl', 'shift', 'tab')
-                            time.sleep(1.0)
-                            
-                            js_add_note = load_macro("ds_add_note.js", NOTE_TEXT=note_text)
-                            pyperclip.copy(js_add_note)
-                            pyautogui.hotkey('ctrl', 'l')
-                            time.sleep(0.3)
-                            pyautogui.write('javascript:')
-                            time.sleep(0.2)
-                            pyautogui.hotkey('ctrl', 'v')
-                            time.sleep(0.3)
-                            pyautogui.press('enter')
-                            
-                            time.sleep(1.5)
-                            print("[PLAYBISON] Note injected! Set to IMPORTANT. Waiting for manual submit.")
-                        else:
-                            print("[PHASE 6] No conditions met for cancellation note.")
-                    else:
-                        print(f"[PAYMENTIQ] Could not extract table data. Raw: {piq_res}")
+                    print("[GOOGLE SHEETS] Data successfully logged!")
                 else:
                     print(f"[PLAYBISON] Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
             else:
                 print("[PLAYBISON] Could not extract wallet_id from modal.")
                 print(f"\n[PLAYBISON] Result: {verify_raw}")
-        # 'else' block for ratio >= 25% removed because we now proceed for all ratios
     else:
         print("[DATASTUDIO] Could not determine W/D ratio automatically.")
         

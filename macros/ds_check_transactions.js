@@ -178,16 +178,45 @@
     if (!container) return { tbl: null, idx: -1 };
     let tables = Array.from(container.querySelectorAll('table'));
     let dataTbl = tables.find(t =>
-      Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim().includes('note'))
+      Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim() === 'note' || c.textContent.toLowerCase().trim().includes('note'))
     );
     if (!dataTbl) return { tbl: null, idx: -1 };
+
     let allTrs = Array.from(dataTbl.querySelectorAll('tr'));
+    let dataRow = allTrs.find(tr => tr.querySelector('td') && tr.children.length > 12);
+    
+    let colIndex = -1;
+    
+    // Attempt standard colspan calculation
     for (let tr of allTrs) {
-      let cells = Array.from(tr.children);
-      let idx = cells.findIndex(c => c.textContent.toLowerCase().trim().includes('note'));
-      if (idx !== -1) return { tbl: dataTbl, idx: idx };
+      if (tr.querySelector('td') && !tr.querySelector('th')) continue;
+      let currentIdx = 0;
+      let found = false;
+      for (let cell of Array.from(tr.children)) {
+        let txt = cell.textContent.toLowerCase().trim();
+        if (txt === 'note' || (txt.includes('note') && txt.length < 10)) {
+          colIndex = currentIdx;
+          found = true;
+          break;
+        }
+        currentIdx += parseInt(cell.getAttribute('colspan') || cell.colSpan || 1, 10);
+      }
+      if (found) break;
     }
-    return { tbl: null, idx: -1 };
+
+    // Force bulletproof fallback for Playbison Transactions table
+    if (dataRow) {
+      let len = dataRow.children.length;
+      // In Playbison, if length is 17, note is 15. It's always len - 2.
+      if (len >= 15) {
+        // Double check if colIndex is reasonable. If it points to 'balance after' (e.g., 11), override it.
+        if (colIndex === -1 || colIndex < 14) {
+          colIndex = len - 2;
+        }
+      }
+    }
+
+    return { tbl: dataTbl, idx: colIndex };
   }
 
   function hasBlankInResults(container) {
