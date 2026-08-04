@@ -178,6 +178,7 @@
     if (!container) return { tbl: null, idx: -1 };
     let tables = Array.from(container.querySelectorAll('table'));
     let dataTbl = tables.find(t =>
+      (t.offsetWidth > 0 || t.offsetHeight > 0) && 
       Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim() === 'note' || c.textContent.toLowerCase().trim().includes('note'))
     );
     if (!dataTbl) return { tbl: null, idx: -1 };
@@ -245,6 +246,7 @@
     function parseCurrentPage(cont) {
       let tables = Array.from(cont.querySelectorAll('table'));
       let dataTbl = tables.find(t =>
+        (t.offsetWidth > 0 || t.offsetHeight > 0) &&
         Array.from(t.querySelectorAll('th,td')).some(c => {
           let txt = c.textContent.toLowerCase().trim();
           return txt === 'out val' || txt === 'in val' || txt === 'wallet id';
@@ -466,10 +468,7 @@
               }, 4500);
             }, 800);
           } else {
-            computeAllPagesStack(freshModal, function(stackResult) {
-              let resText = stackResult || "AUTOMATIC_ALL";
-              copyToClipboard("TRANS_RESULT:" + resText);
-            });
+            copyToClipboard("TRANS_RESULT:AUTOMATIC_ALL");
           }
         }, 4500);
 
