@@ -21,16 +21,18 @@ def main():
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
         time.sleep(1)
 
-    # Read saved user ID & email if available
+    # Read saved user ID, email & brand if available
     import json, os, re
     player_id = ""
     player_email = ""
+    player_brand = ""
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r") as f:
                 data = json.load(f)
                 player_id = data.get("id", "")
                 player_email = data.get("email", "")
+                player_brand = data.get("brand", "")
         except Exception:
             pass
             
@@ -128,7 +130,7 @@ def main():
         webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
         time.sleep(6.0)
         
-        js_check_dup = load_macro("ds_check_duplicates.js", FN=fn, LN=ln, CITY=city)
+        js_check_dup = load_macro("ds_check_duplicates.js", FN=fn, LN=ln, CITY=city, BRAND=player_brand)
         
         pyperclip.copy("WAITING_FOR_DUP")
         pyperclip.copy(js_check_dup)
@@ -258,8 +260,8 @@ def main():
     print(f"\n[DATASTUDIO] Raw W/D ratio text: '{ratio_raw}'")
 
     if ratio_raw == "MULTIBRAND":
-        print("[DATASTUDIO] Multibrand (2+ rows) detected. Selecting 'Bison Casino' in Brand filter...")
-        js_macro_brand = load_macro("ds_brand_filter.js")
+        print(f"[DATASTUDIO] Multibrand (2+ rows) detected. Selecting '{player_brand}' in Brand filter...")
+        js_macro_brand = load_macro("ds_brand_filter.js", TARGET_BRAND=player_brand)
         
         pyperclip.copy(js_macro_brand)
         pyautogui.hotkey('ctrl', 'l')
@@ -392,7 +394,7 @@ def main():
                     clip_val = pyperclip.paste().strip()
                     if clip_val and clip_val.startswith("TRANS_RESULT:"):
                         trans_result = clip_val.replace("TRANS_RESULT:", "").strip()
-                        if trans_result in ["NO_STACK_FOUND", "AUTOMATIC_ALL", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
+                        if trans_result in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
                             print(f"[PLAYBISON] No stack found ({trans_result}). Continuing flow automatically...")
                         else:
                             print(f"\n{'='*60}\n[PLAYBISON] ⚠️ STACK TRANSACTIONS FOUND:\n{trans_result}\n{'='*60}\n")
@@ -454,9 +456,9 @@ def main():
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
                     
-                    # Columns A to J separated by Tabs
+                    # Columns A to K separated by Tabs
                     trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
-                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}"
+                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1n-VC5cQAxhi2a2yC0VPWWSLRWg6NEQsKNv35UZoGbqI/edit?pli=1&gid=0#gid=0"

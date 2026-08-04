@@ -43,7 +43,7 @@ oles column does not contain VIP).
    - Automatically switches to the **Transactions** tab.
    - Selects **Redeem the bonuses** in the Type dropdown and sets Date From to **1 month ago**.
    - Inspects the Note column across all result rows.
-   - If all rows have the text "automatic", it skips further stack analysis and sends completion signal (`AUTOMATIC_ALL`) to Python.
+   - If all rows have the text "automatic", it skips further stack analysis and sends completion signal (`AUTOMATIC`) to Python.
    - If any row lacks "automatic", it clears the type filter, sets Amount Range In (To) to **-8.01** and clicks Search again to calculate stack count across all pagination pages.
    - If no stack transactions are found, no alert dialog is shown in Chrome; the script continues automatically.
    - If stack transactions are found, a prompt dialog appears displaying the stack count breakdown for user review.

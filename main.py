@@ -36,17 +36,17 @@ def main():
         clipboard_content = pyperclip.paste().strip()
         # If clipboard changed from our waiting flag, and looks like an email
         if clipboard_content != "WAITING_FOR_EMAIL" and "@" in clipboard_content:
-            if "|" in clipboard_content:
-                email, player_id = clipboard_content.split("|", 1)
-            else:
-                email, player_id = clipboard_content, ""
+            parts = clipboard_content.split("|")
+            email = parts[0] if len(parts) > 0 else clipboard_content
+            player_id = parts[1] if len(parts) > 1 else ""
+            brand = parts[2] if len(parts) > 2 else ""
             
-            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id}")
+            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand}")
             
             # Save session data for Data Studio step
             import json
             with open("last_user.json", "w") as f:
-                json.dump({"email": email, "id": player_id}, f, indent=2)
+                json.dump({"email": email, "id": player_id, "brand": brand}, f, indent=2)
             
             # Put clean email in clipboard for Data Studio search input
             pyperclip.copy(email)
