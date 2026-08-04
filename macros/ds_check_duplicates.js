@@ -80,7 +80,7 @@
         setTimeout(() => {
           let trs2 = Array.from(document.querySelectorAll('tbody tr')).filter(r => r.children.length > 3);
           if (checkBrandDups(trs2)) {
-            prompt('DUPLICATE', 'YES');
+            prompt('DUPLICATE', 'NO');
           } else {
             prompt('DUPLICATE', 'NO');
           }

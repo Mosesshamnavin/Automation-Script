@@ -156,7 +156,9 @@ def main():
             pyautogui.press('enter')
             
         if dup_res == "YES":
-            print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS FOUND FOR {fn} {ln} {city}!!!\n{'='*60}\n")
+            print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS FOUND FOR {fn} {ln}!!!\n{'='*60}\n")
+        elif dup_res == "NO":
+            print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS VERIFIED FOR {ln} {city}!!!\n{'='*60}\n")
         else:
             print(f"[PLAYBISON] No duplicate accounts found for {fn} {ln}.")
     
