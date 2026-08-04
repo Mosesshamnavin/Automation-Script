@@ -6,6 +6,9 @@
       el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     }
 
+    let targetBrand = '###TARGET_BRAND###'.toLowerCase().trim();
+    if (!targetBrand) targetBrand = 'bison casino';
+
     let allEls = Array.from(document.querySelectorAll('*'));
     let brandLabel = allEls.find(
       e => e.children.length === 0 &&
@@ -18,15 +21,21 @@
 
     setTimeout(() => {
       let popupEls = Array.from(document.querySelectorAll('*'));
-      let fireballOpt = popupEls.find(
+      let brandOpt = popupEls.find(
         e => e.children.length === 0 &&
-          e.textContent.trim().toLowerCase() === 'fireball' &&
+          e.textContent.trim().toLowerCase() === targetBrand &&
           e.getBoundingClientRect().width > 0
       );
-      if (fireballOpt) {
-        let row = fireballOpt.closest('.row, [role="row"], [role="option"]') || fireballOpt.parentElement.parentElement;
+      
+      if (brandOpt) {
+        let row = brandOpt.closest('.row, [role="row"], [role="option"]') || brandOpt.parentElement.parentElement;
         if (row) {
-          simClick(row);
+          let onlyBtn = Array.from(row.querySelectorAll('*')).find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'only');
+          if (onlyBtn) {
+            simClick(onlyBtn);
+          } else {
+            simClick(row);
+          }
           setTimeout(() => {
             simClick(document.body);
             prompt('WD_FILTER:', 'SUCCESS');
@@ -35,7 +44,7 @@
           prompt('WD_FILTER:', 'ROW_NOT_FOUND');
         }
       } else {
-        prompt('WD_FILTER:', 'FIREBALL_NOT_FOUND');
+        prompt('WD_FILTER:', 'BRAND_NOT_FOUND');
       }
     }, 1500);
   } catch (e) {

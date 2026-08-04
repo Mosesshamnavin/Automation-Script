@@ -462,13 +462,13 @@
                 let liveDoc = getFrames()[0];
                 let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
                 computeAllPagesStack(liveModal, function(stackResult) {
-                  let resText = stackResult || "NO_STACK_FOUND";
+                  let resText = stackResult || "NO_STACK";
                   copyToClipboard("TRANS_RESULT:" + resText);
                 });
               }, 4500);
             }, 800);
           } else {
-            copyToClipboard("TRANS_RESULT:AUTOMATIC_ALL");
+            copyToClipboard("TRANS_RESULT:AUTOMATIC");
           }
         }, 4500);
 
