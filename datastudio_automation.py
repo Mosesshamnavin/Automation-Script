@@ -432,20 +432,54 @@ def main():
                 pyautogui.press('enter')
                 
                 time.sleep(1.0)
-                dep_res = pyperclip.paste().strip()
-                last_deposit_id = ""
+                last_deposit_val = pyperclip.paste().strip()
+                last_deposit_id = "NOT_FOUND"
                 last_deposit_op = playbison_op
-                if dep_res.startswith("DEP_ID:"):
-                    parts = dep_res.replace("DEP_ID:", "").split("|OP:")
-                    last_deposit_id = parts[0].strip()
-                    if len(parts) > 1:
-                        if parts[1].strip() != "NO_MATCH":
-                            last_deposit_op = parts[1].strip()
-                    
-                    if last_deposit_id != "NOT_FOUND":
-                        print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
+                has_doc_req = False
+                
+                if last_deposit_val.startswith("DEP_ID:"):
+                    id_part = last_deposit_val.replace("DEP_ID:", "")
+                    if "|OP:" in id_part:
+                        parts = id_part.split("|OP:")
+                        last_deposit_id = parts[0]
+                        op_doc_part = parts[1]
+                        if "|DOC:" in op_doc_part:
+                            op_parts = op_doc_part.split("|DOC:")
+                            last_deposit_op = op_parts[0]
+                            if op_parts[1] == "YES":
+                                has_doc_req = True
+                        else:
+                            last_deposit_op = op_doc_part
                     else:
-                        print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
+                        last_deposit_id = id_part
+                
+                print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
+                
+                if has_doc_req:
+                    print("[PLAYBISON] 'req' keyword found in Payment Log notes! Switching to Documents tab...")
+                    js_docs = """(function(){ 
+                        let tabs = Array.from(document.querySelectorAll('a, li, span, button'));
+                        let docTab = tabs.find(t => t.textContent.trim().toLowerCase() === 'documents');
+                        if (docTab) {
+                            docTab.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+                            docTab.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+                            docTab.dispatchEvent(new MouseEvent('click', {bubbles:true}));
+                        }
+                    })();"""
+                    js_docs_min = js_docs.replace('\n', ' ').replace('\r', '')
+                    pyperclip.copy(f"javascript:{js_docs_min}")
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    time.sleep(2.0)
+                
+                if last_deposit_id != "NOT_FOUND":
+                    print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
+                else:
+                    print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
                 
                 # Use the true player_id extracted from the wallet page
                 extracted_id = true_player_id

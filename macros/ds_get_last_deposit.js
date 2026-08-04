@@ -27,6 +27,7 @@
       idIdx = headerCells.findIndex(c => c.textContent.trim().toLowerCase() === 'id');
       statusIdx = headerCells.findIndex(c => c.textContent.trim().toLowerCase() === 'status');
       opIdx = headerCells.findIndex(c => c.textContent.trim().toLowerCase() === 'operator name');
+      let notesIdx = headerCells.findIndex(c => c.textContent.trim().toLowerCase() === 'notes');
 
       if (typeIdx !== -1 && idIdx !== -1 && statusIdx !== -1) {
         let dataRows = allTrs.slice(1);
@@ -39,13 +40,23 @@
           return false;
         });
         
+        let hasReq = "NO";
+        if (notesIdx !== -1 && allTrs.length > 1) {
+          if (allTrs[1].children.length > notesIdx) {
+            let topNotes = allTrs[1].children[notesIdx].textContent.toLowerCase();
+            if (topNotes.includes('req')) {
+              hasReq = "YES";
+            }
+          }
+        }
+
         if (depositRow && depositRow.children.length > idIdx) {
           let depId = depositRow.children[idIdx].textContent.trim();
           let opName = "NO_MATCH";
           if (opIdx !== -1 && depositRow.children.length > opIdx) {
             opName = depositRow.children[opIdx].textContent.trim();
           }
-          depositInfo = { id: depId, op: opName };
+          depositInfo = { id: depId, op: opName, req: hasReq };
           break;
         }
       }
@@ -55,7 +66,7 @@
 
   if (depositInfo) {
     let input = document.createElement('input');
-    input.value = "DEP_ID:" + depositInfo.id + "|OP:" + depositInfo.op;
+    input.value = "DEP_ID:" + depositInfo.id + "|OP:" + depositInfo.op + "|DOC:" + depositInfo.req;
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');
