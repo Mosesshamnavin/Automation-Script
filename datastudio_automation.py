@@ -375,6 +375,33 @@ def main():
                 print("[PLAYBISON] Waiting 5 seconds for notes data to load...")
                 time.sleep(5.0)
 
+                # Step 1.5: Check Notes for "req" keyword
+                js_check_notes = load_macro("ds_check_notes.js")
+                pyperclip.copy("WAITING_FOR_NOTES")
+                pyperclip.copy(js_check_notes)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                print("[PLAYBISON] Checking Notes tab data...")
+                
+                notes_have_req = False
+                for _ in range(5):
+                    time.sleep(0.8)
+                    clip_val = pyperclip.paste().strip()
+                    if clip_val.startswith("REQ_FOUND:"):
+                        res_part = clip_val.replace("REQ_FOUND:", "")
+                        if "|" in res_part:
+                            parts = res_part.split("|")
+                            if parts[0] == "YES":
+                                notes_have_req = True
+                            note_txt = parts[1].replace("TEXT:", "")
+                            print(f"[PLAYBISON] Checked top note: '{note_txt}' (Contains 'req': {notes_have_req})")
+                        break
+
                 # Step 2: Transactions & Stack Check macro
                 js_trans_macro = load_macro("ds_check_transactions.js")
                 pyperclip.copy("WAITING_FOR_TRANS")
@@ -455,8 +482,11 @@ def main():
                 
                 print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
                 
-                if has_doc_req:
-                    print("[PLAYBISON] 'req' keyword found in Payment Log notes! Switching to Documents tab...")
+                if notes_have_req or has_doc_req:
+                    if notes_have_req:
+                        print("[PLAYBISON] 'req' keyword found in Notes tab! Switching to Documents tab...")
+                    else:
+                        print("[PLAYBISON] 'req' keyword found in Payment Log notes! Switching to Documents tab...")
                     js_docs = """(function(){ 
                         let tabs = Array.from(document.querySelectorAll('a, li, span, button'));
                         let docTab = tabs.find(t => t.textContent.trim().toLowerCase() === 'documents');
