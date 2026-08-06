@@ -55,7 +55,7 @@ def main():
             pyautogui.press('enter')
             break
         time.sleep(1.5)
-        
+    
     # 4. Give the user 2 seconds to release the Enter key after closing the prompt
     print("\n[MAIN] Proceeding to Data Studio in 3 seconds. DO NOT TOUCH MOUSE/KEYBOARD!")
     time.sleep(2)

@@ -270,7 +270,7 @@
               currIdx = i + 1;
             }
           }
-          if (txt === 'before' && i > 10) {
+          if (txt === 'before' && i > 8) {
             bonusBeforeIdx = i;
             if (i + 1 < cells.length) bonusAfterIdx = i + 1;
           }
@@ -279,7 +279,7 @@
       }
 
       if (valIdx === -1) {
-        valIdx = 6;
+        valIdx = 5;
         currIdx = 7;
       }
 
@@ -317,7 +317,8 @@
         let num = parseFloat(valStr.replace(',', '.'));
         if (isNaN(num)) continue;
 
-        let currFormatted = currStr ? currStr.charAt(0).toUpperCase() + currStr.slice(1).toLowerCase() : '';
+        let currCode = currStr ? currStr.split(' ')[0] : '';
+        let currFormatted = currCode ? currCode.charAt(0).toUpperCase() + currCode.slice(1).toLowerCase() : '';
         let absVal = Math.abs(num);
         let valFormatted = `-${absVal}`;
 
@@ -384,6 +385,72 @@
         try { document.body.removeChild(ta); } catch(e){}
       }, 30000);
     } catch (e) {}
+  }
+
+  function getTotalPages(cont) {
+    let allEls = Array.from(cont.querySelectorAll('*'));
+    let bestMatch = null;
+    let maxDepth = -1;
+    
+    for (let e of allEls) {
+      let t = (e.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (t.includes('of') && /\d+ of \d+/.test(t)) {
+        // Calculate depth to get the most specific element containing the text
+        let depth = 0;
+        let curr = e;
+        while(curr.parentElement) { depth++; curr = curr.parentElement; }
+        
+        if (depth > maxDepth) {
+          maxDepth = depth;
+          bestMatch = t;
+        }
+      }
+    }
+    
+    if (bestMatch) {
+      let m = bestMatch.match(/(\d+)\s+of\s+(\d+)/i);
+      if (m && m[2]) return parseInt(m[2], 10);
+    }
+    return 1;
+  }
+
+  function getStackDatesFromPage(cont) {
+    let tables = Array.from(cont.querySelectorAll('table'));
+    let dataTbl = tables.find(t => (t.offsetWidth > 0 || t.offsetHeight > 0) && Array.from(t.querySelectorAll('th,td')).some(c => c.textContent.toLowerCase().trim() === 'out val' || c.textContent.toLowerCase().trim() === 'in val'));
+    if (!dataTbl) return [];
+    
+    let allTrs = Array.from(dataTbl.querySelectorAll('tr'));
+    let dateIdx = -1, noteIdx = -1;
+    
+    // Find the header row and identify column indices for 'date' and 'note'
+    for (let tr of allTrs) {
+      let cells = Array.from(tr.children);
+      for (let i = 0; i < cells.length; i++) {
+        let txt = cells[i].textContent.toLowerCase().trim();
+        if (txt === 'date') dateIdx = i;
+        if (txt === 'note') noteIdx = i;
+      }
+      if (dateIdx !== -1) break;
+    }
+    
+    // Fallbacks if headers not found
+    if (dateIdx === -1) dateIdx = 1;
+    // Note column is typically the 15th column (index 14), after 'ip' (index 13)
+    if (noteIdx === -1) noteIdx = 14;
+
+    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > dateIdx);
+    let stackDates = [];
+    
+    for (let tr of dataRows) {
+      // A stack row has an empty 'note' column
+      let noteCell = tr.children[noteIdx];
+      let noteText = noteCell ? (noteCell.textContent || '').trim() : '';
+      if (noteText === '') {
+        let dateStr = (tr.children[dateIdx].textContent || '').trim();
+        if (dateStr) stackDates.push(dateStr);
+      }
+    }
+    return stackDates;
   }
 
   let links = Array.from(document.querySelectorAll('a'));
@@ -461,6 +528,14 @@
               setTimeout(() => {
                 let liveDoc = getFrames()[0];
                 let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
+                
+                let totalPages = getTotalPages(liveModal);
+                if (totalPages > 5) {
+                  let stackDates = getStackDatesFromPage(liveModal);
+                  copyToClipboard("TRANS_RESULT:EXCEEDS_5_PAGES|" + stackDates.join(','));
+                  return;
+                }
+                
                 computeAllPagesStack(liveModal, function(stackResult) {
                   let resText = stackResult || "NO_STACK";
                   copyToClipboard("TRANS_RESULT:" + resText);
