@@ -381,31 +381,123 @@ def main():
                 time.sleep(5.0)
 
                 # Step 1.5: Check Notes for "req" keyword
+                print("[PLAYBISON] Checking Notes tab data (waiting for table to load)...")
                 js_check_notes = load_macro("ds_check_notes.js")
-                pyperclip.copy("WAITING_FOR_NOTES")
-                pyperclip.copy(js_check_notes)
-                pyautogui.hotkey('ctrl', 'l')
-                time.sleep(0.3)
-                pyautogui.write('javascript:')
-                time.sleep(0.2)
-                pyautogui.hotkey('ctrl', 'v')
-                time.sleep(0.3)
-                pyautogui.press('enter')
-                print("[PLAYBISON] Checking Notes tab data...")
                 
                 notes_have_req = False
-                for _ in range(5):
-                    time.sleep(0.8)
+                for i in range(15):
+                    pyperclip.copy("WAITING_FOR_NOTES")
+                    pyperclip.copy(js_check_notes)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    
+                    time.sleep(1.0) # Wait a bit before checking clipboard
+                    
                     clip_val = pyperclip.paste().strip()
                     if clip_val.startswith("REQ_FOUND:"):
                         res_part = clip_val.replace("REQ_FOUND:", "")
                         if "|" in res_part:
                             parts = res_part.split("|")
-                            if parts[0] == "YES":
-                                notes_have_req = True
                             note_txt = parts[1].replace("TEXT:", "")
-                            print(f"[PLAYBISON] Checked top note: '{note_txt}' (Contains 'req': {notes_have_req})")
-                        break
+                            if note_txt != "NOTES_NOT_FOUND":
+                                if parts[0] == "YES":
+                                    notes_have_req = True
+                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Contains 'req': {notes_have_req})")
+                                break
+                    time.sleep(0.5)
+
+                if notes_have_req:
+                    print("[PLAYBISON] Keyword 'req' detected in notes! Opening Documents tab...")
+                    js_docs_macro = load_macro("ds_open_documents.js")
+                    pyperclip.copy(js_docs_macro)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    print("[PLAYBISON] Waiting 7 seconds on Documents tab for inspection...")
+                    time.sleep(7.0)
+                    
+                    print("[PLAYBISON] Checking for 'In progress' documents...")
+                    js_open_doc = load_macro("ds_open_in_progress_doc.js")
+                    pyperclip.copy(js_open_doc)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    
+                    time.sleep(1.5) # Give it time to click and copy result
+                    clip_val = pyperclip.paste().strip()
+                    if clip_val == "DOC_OPENED:YES":
+                        print("\n" + "="*60)
+                        print("⚠️ AN 'IN PROGRESS' DOCUMENT IS OPEN!")
+                        print(f"Note context to verify: '{note_txt}'")
+                        print("="*60 + "\n")
+                        
+                        # Use sound alert to notify user
+                        try:
+                            import winsound
+                            winsound.Beep(1000, 500)
+                        except:
+                            pass
+                            
+                        print("[PLAYBISON] Taking screenshot of the document in 2 seconds...")
+                        time.sleep(2.0)
+                        try:
+                            import base64
+                            import io
+                            import requests
+                            
+                            img = pyautogui.screenshot()
+                            buf = io.BytesIO()
+                            img.save(buf, format='JPEG', quality=70)
+                            b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+                            
+                            print("[PLAYBISON] Verifying document via Mistral AI...")
+                            r = requests.post('https://api.mistral.ai/v1/chat/completions', 
+                                headers={'Authorization': 'Bearer wMV2n0FvKzyQYqiiBlGXHVlNKpiQCWJD', 'Content-Type': 'application/json'},
+                                json={
+                                    'model': 'pixtral-12b-2409',
+                                    'messages': [
+                                        {
+                                            'role': 'user', 
+                                            'content': [
+                                                {'type': 'text', 'text': f"This is a screenshot of a user's uploaded document for payment verification.\n1. Check if the name on the document matches (or closely matches) the user's name: '{true_player_name}'.\n2. Check if the payment details in the document match the requirements in this note: '{note_txt}'. (For example, if the note mentions an IBAN or a credit card number, verify it appears in the document).\n\nReply ONLY with YES or NO, followed by a very brief explanation of what you found."},
+                                                {'type': 'image_url', 'image_url': {'url': f'data:image/jpeg;base64,{b64}'}}
+                                            ]
+                                        }
+                                    ]
+                                }
+                            )
+                            resp = r.json()
+                            ai_msg = resp['choices'][0]['message']['content']
+                            print(f"\n[MISTRAL AI VERIFICATION]:\n{ai_msg}\n")
+                            
+                            if ai_msg.strip().upper().startswith("NO"):
+                                print("[PLAYBISON] Verification FAILED! Please check manually.")
+                                input("Press ENTER when you are ready to continue...")
+                            else:
+                                print("[PLAYBISON] Verification PASSED! Automatically continuing in 3 seconds...")
+                                time.sleep(3.0)
+                        except Exception as e:
+                            print(f"[PLAYBISON] Mistral API failed: {e}")
+                            input("Press ENTER when you have verified the details and are ready to continue...")
+                        
+                        print("[PLAYBISON] Resuming automation flow...")
+                        
+                        # Switch focus back to Chrome if they clicked away to the terminal
+                        print("[PLAYBISON] Switching back to Chrome in 3 seconds...")
+                        time.sleep(3.0)
 
                 # Step 2: Transactions & Stack Check macro
                 js_trans_macro = load_macro("ds_check_transactions.js")
