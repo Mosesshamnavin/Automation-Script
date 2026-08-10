@@ -13,62 +13,86 @@ def main():
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
         time.sleep(1)
 
-    # 1. Clear the clipboard so we know when the user copies the new email
-    pyperclip.copy("WAITING_FOR_EMAIL")
+    is_first_run = True
     
-    # 2. Execute Step 1 (Playbison Extraction)
-    try:
-        subprocess.run([sys.executable, "playbison_automation.py"])
-    except Exception as e:
-        print(f"Error running playbison_automation.py: {e}")
-        return
-        
-    print("\n[MAIN] Playbison macro injected.")
-    print("[MAIN] Waiting for the browser to find a non-VIP role...")
-    print("[MAIN] (Auto-Copy is enabled! It will automatically grab the email when found)")
-    
-    # 3. Wait for the clipboard to change (meaning the script found the email)
     while True:
-        # Try to copy from the prompt that appears
-        pyautogui.hotkey('ctrl', 'c')
-        time.sleep(0.5)
+        # 1. Clear the clipboard so we know when the user copies the new email
+        pyperclip.copy("WAITING_FOR_EMAIL")
         
-        clipboard_content = pyperclip.paste().strip()
-        # If clipboard changed from our waiting flag, and looks like an email
-        if clipboard_content != "WAITING_FOR_EMAIL" and "@" in clipboard_content:
-            parts = clipboard_content.split("|")
-            email = parts[0] if len(parts) > 0 else clipboard_content
-            player_id = parts[1] if len(parts) > 1 else ""
-            brand = parts[2] if len(parts) > 2 else ""
-            w_value = parts[3] if len(parts) > 3 else ""
-            
-            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value}")
-            
-            # Save session data for Data Studio step
-            import json
-            with open("last_user.json", "w") as f:
-                json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value}, f, indent=2)
-            
-            # Put clean email in clipboard for Data Studio search input
-            pyperclip.copy(email)
-            
-            # Hit Enter to close the JS prompt
-            pyautogui.press('enter')
+        # 2. Execute Step 1 (Playbison Extraction)
+        try:
+            if is_first_run:
+                print("\n[LOOP] Starting First Iteration...")
+                subprocess.run([sys.executable, "playbison_automation.py"])
+                is_first_run = False
+            else:
+                print("\n[LOOP] Starting Next Iteration (Scan Only)...")
+                subprocess.run([sys.executable, "playbison_automation.py", "--scan-only"])
+        except Exception as e:
+            print(f"Error running playbison_automation.py: {e}")
             break
-        time.sleep(1.5)
-    
-    # 4. Give the user 2 seconds to release the Enter key after closing the prompt
-    print("\n[MAIN] Proceeding to Data Studio in 3 seconds. DO NOT TOUCH MOUSE/KEYBOARD!")
-    time.sleep(2)
-    
-    # 5. Execute Step 2 (Data Studio)
-    print("\n--- STARTING STEP 2: DATA STUDIO ---")
-    try:
-        subprocess.run([sys.executable, "datastudio_automation.py", "--auto"])
-    except Exception as e:
-        print(f"Error running datastudio_automation.py: {e}")
+            
+        print("\n[MAIN] Playbison macro injected.")
+        print("[MAIN] Waiting for the browser to find a non-VIP role...")
+        print("[MAIN] (Auto-Copy is enabled! It will automatically grab the email when found)")
         
-    print("\n[MAIN] Master automation workflow complete!")
+        # 3. Wait for the clipboard to change (meaning the script found the email)
+        email_found = False
+        while True:
+            # Try to copy from the prompt that appears
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+            
+            clipboard_content = pyperclip.paste().strip()
+            # If clipboard changed from our waiting flag, and looks like an email
+            if clipboard_content != "WAITING_FOR_EMAIL" and "@" in clipboard_content:
+                parts = clipboard_content.split("|")
+                email = parts[0] if len(parts) > 0 else clipboard_content
+                player_id = parts[1] if len(parts) > 1 else ""
+                brand = parts[2] if len(parts) > 2 else ""
+                w_value = parts[3] if len(parts) > 3 else ""
+                
+                print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value}")
+                
+                # Save session data for Data Studio step
+                import json
+                with open("last_user.json", "w") as f:
+                    json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value}, f, indent=2)
+                
+                # Put clean email in clipboard for Data Studio search input
+                pyperclip.copy(email)
+                
+                # Hit Enter to close the JS prompt
+                pyautogui.press('enter')
+                email_found = True
+                break
+            
+            # If the macro finished but didn't find an email (it clicked Previous), it will prompt FINISHED_SCAN
+            if clipboard_content == "FINISHED_SCAN":
+                print("[MAIN] Table scan finished, but no non-VIP records were found on this page.")
+                break
+                
+            time.sleep(1.5)
+            
+        if not email_found:
+            print("[MAIN] No target found in this iteration. Retrying in 5 seconds...")
+            time.sleep(5)
+            continue
+        
+        # 4. Give the user 2 seconds to release the Enter key after closing the prompt
+        print("\n[MAIN] Proceeding to Data Studio in 3 seconds. DO NOT TOUCH MOUSE/KEYBOARD!")
+        time.sleep(3)
+        
+        # 5. Execute Step 2 (Data Studio)
+        print("\n--- STARTING STEP 2: DATA STUDIO ---")
+        try:
+            subprocess.run([sys.executable, "datastudio_automation.py", "--auto"])
+        except Exception as e:
+            print(f"Error running datastudio_automation.py: {e}")
+            break
+            
+        print("\n[MAIN] Finished processing this ID. Looping back to Playbison...\n")
+        time.sleep(3)
 
 if __name__ == "__main__":
     main()

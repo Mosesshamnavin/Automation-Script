@@ -327,11 +327,16 @@ def main():
 
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
-        if True: # Proceed regardless of ratio
-            if ratio_val < 25.0:
-                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)!")
+        if True: 
+            if ratio_val >= 25.0:
+                print(f"[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%)! Closing tabs and terminating flow early.")
+                pyautogui.hotkey('ctrl', 'w') # Close Data Studio
+                time.sleep(0.5)
+                pyautogui.hotkey('ctrl', 'w') # Close Duplicates tab
+                time.sleep(0.5)
+                sys.exit(0)
             else:
-                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%). Proceeding to Playbison for manual cancellation check!")
+                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)! Proceeding to Playbison for manual cancellation check!")
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
@@ -421,6 +426,9 @@ def main():
                     time.sleep(0.5)
 
                 if notes_have_req:
+                    print("[PLAYBISON] Keyword 'req' detected in notes, but document checking is disabled for LOOP mode. Skipping Mistral.")
+                    
+                if False: # Bypass for loop mode
                     print("[PLAYBISON] Keyword 'req' detected in notes! Opening Documents tab...")
                     js_docs_macro = load_macro("ds_open_documents.js")
                     pyperclip.copy(js_docs_macro)
@@ -597,6 +605,14 @@ def main():
                             
                             if not analytics_dates_str or analytics_dates_str == "NO_DATES_FOUND" or analytics_dates_str.startswith("ERROR"):
                                 print(f"[PLAYBISON] Failed to extract dates from Analytics: {analytics_dates_str}")
+                                pyautogui.hotkey('ctrl', 'w') # Close Analytics
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w') # Close Wallet
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w') # Close Data Studio
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w') # Close Duplicates
+                                time.sleep(0.5)
                                 sys.exit(1)
                             
                             print("[PLAYBISON] Successfully extracted dates from Analytics.")
@@ -642,6 +658,14 @@ def main():
                             
                             if not parsed_dates:
                                 print("[PLAYBISON] Could not parse any valid dates.")
+                                pyautogui.hotkey('ctrl', 'w')
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w')
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w')
+                                time.sleep(0.5)
+                                pyautogui.hotkey('ctrl', 'w')
+                                time.sleep(0.5)
                                 sys.exit(1)
                                 
                             min_date = min(parsed_dates)
@@ -809,10 +833,14 @@ def main():
                     trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
                     
                     approval_status = "Approve"
+                    
                     if dup_res == "YES":
                         approval_status = "Review (Duplicates)"
                     elif mistral_failed:
                         approval_status = "Review (Mistral Failed)"
+                        
+                    if notes_have_req or has_doc_req:
+                        approval_status = "verify docs"
                         
                     row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}\t{approval_status}"
                     pyperclip.copy(row_data)
@@ -850,8 +878,22 @@ def main():
                     # Press Enter to finalize paste
                     pyautogui.press('enter')
                     time.sleep(0.5)
+                    time.sleep(0.5)
                     
                     print("[GOOGLE SHEETS] Data successfully logged!")
+                    
+                    # Clean up tabs
+                    print("[DATASTUDIO] Closing tabs to return to Playbison...")
+                    pyautogui.hotkey('ctrl', 'w') # Close Sheets
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'w') # Close Wallet
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'w') # Close Data Studio
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'w') # Close Duplicates
+                    time.sleep(0.5)
+                    
+                    print("[DATASTUDIO] Done. Ready for next loop.")
                 else:
                     print(f"[PLAYBISON] Failed to extract ID from table. Clipboard contained: '{extracted_id}'")
             else:

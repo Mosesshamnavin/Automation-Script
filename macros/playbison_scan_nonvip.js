@@ -50,6 +50,8 @@
         let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
         let trs = Array.from(doc.querySelectorAll('tbody tr'));
         if (trs.length === 0) continue;
+        
+        trs.reverse();
 
         let foundTarget = false;
         let foundEmail = "";
@@ -57,11 +59,31 @@
         let foundBrand = "";
         let foundWValue = "";
 
+        window._processedBisonIds = window._processedBisonIds || new Set();
+
         for (let tr of trs) {
+          let idVal = "";
+          if (idIdx !== -1) {
+            let idTd = tr.children[idIdx];
+            if (idTd) idVal = idTd.textContent.trim();
+          }
+          
+          // Skip if we already processed this ID in a previous loop
+          if (idVal && window._processedBisonIds.has(idVal)) continue;
+          
+          let emailVal = "";
+          if (loginIdx !== -1) {
+            let loginTd = tr.children[loginIdx];
+            if (loginTd) emailVal = loginTd.textContent.trim().toLowerCase();
+          }
+          
+      
+          
           let td = tr.children[roleIdx];
           let roleVal = td ? td.textContent.trim() : "";
           if (td && !roleVal.toUpperCase().includes('VIP')) {
             foundTarget = true;
+            if (idVal) window._processedBisonIds.add(idVal);
             td.style.border = "4px solid red";
             tr.style.backgroundColor = "#ffcccc";
             if (loginIdx !== -1) {

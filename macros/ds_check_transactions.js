@@ -239,6 +239,47 @@
     return false;
   }
 
+  function getCurrency(container) {
+    if (!container) return null;
+    let tables = Array.from(container.querySelectorAll('table'));
+    let dataTbl = tables.find(t =>
+      (t.offsetWidth > 0 || t.offsetHeight > 0) &&
+      Array.from(t.querySelectorAll('th,td')).some(c => {
+        let txt = c.textContent.toLowerCase().trim();
+        return txt === 'out val' || txt === 'in val' || txt === 'wallet id';
+      })
+    );
+    if (!dataTbl) return null;
+
+    let allTrs = Array.from(dataTbl.querySelectorAll('tr'));
+    let currIdx = -1;
+    for (let tr of allTrs) {
+      let cells = Array.from(tr.children);
+      for (let i = 0; i < cells.length; i++) {
+        let txt = cells[i].textContent.toLowerCase().trim();
+        if (txt === 'val' || txt === 'out val' || txt === 'in val') {
+          if (i + 1 < cells.length && (cells[i+1].textContent.toLowerCase().trim() === 'curr' || cells[i+1].textContent.toLowerCase().trim() === 'currency')) {
+            currIdx = i + 1;
+            break;
+          }
+        }
+      }
+      if (currIdx !== -1) break;
+    }
+    
+    if (currIdx === -1) currIdx = 7;
+
+    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > currIdx);
+    for (let tr of dataRows) {
+        let currCell = tr.children[currIdx];
+        if (currCell) {
+            let txt = currCell.textContent.trim().toUpperCase();
+            if (txt) return txt;
+        }
+    }
+    return null;
+  }
+
   function computeAllPagesStack(container, doneCallback) {
     let globalCounts = {};
     let seenIds = new Set();
@@ -516,12 +557,18 @@
           let blankFound = hasBlankInResults(freshModal);
 
           if (blankFound) {
+            let userCurr = getCurrency(freshModal) || 'PLN';
+            let searchAmt = '-8.01';
+            if (userCurr.includes('EUR')) searchAmt = '-2.01';
+            else if (userCurr.includes('HUF')) searchAmt = '-800.01';
+            else if (userCurr.includes('USD')) searchAmt = '-2.01';
+
             let freshTypeSelect = findTypeSelect(freshModal) || findTypeSelect(freshDoc);
             let freshAmtInput = findAmountInToInput(freshModal) || findAmountInToInput(freshDoc);
             let freshSearchBtn = findSearchButtonForInput(freshAmtInput || freshTypeSelect, freshDoc);
 
             if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
-            if (freshAmtInput) setVal(freshAmtInput, '-8.01');
+            if (freshAmtInput) setVal(freshAmtInput, searchAmt);
 
             setTimeout(() => {
               if (freshSearchBtn) simClick(freshSearchBtn);

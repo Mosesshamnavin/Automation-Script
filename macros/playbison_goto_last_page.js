@@ -51,17 +51,29 @@
         if (closest && minD < 400) {
           goBtn.scrollIntoView({ block: 'center', behavior: 'smooth' });
           setTimeout(() => {
-            let nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-            if (nativeSetter) { nativeSetter.call(closest, lastPage); } else { closest.value = lastPage; }
+            const valueSetter = Object.getOwnPropertyDescriptor(closest, 'value')?.set;
+            const prototype = Object.getPrototypeOf(closest);
+            const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+            
+            if (valueSetter && valueSetter !== prototypeValueSetter && prototypeValueSetter) {
+              prototypeValueSetter.call(closest, lastPage);
+            } else if (valueSetter) {
+              valueSetter.call(closest, lastPage);
+            } else {
+              closest.value = lastPage;
+            }
+            
             closest.dispatchEvent(new Event('input', { bubbles: true }));
             closest.dispatchEvent(new Event('change', { bubbles: true }));
-            closest.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-            closest.blur();
-            goBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-            goBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-            goBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            if (typeof goBtn.click === 'function') goBtn.click();
-          }, 1000);
+            
+            setTimeout(() => {
+              let clickTarget = goBtn.tagName === 'SPAN' ? goBtn.parentElement : goBtn;
+              clickTarget.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              clickTarget.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+              clickTarget.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              if (typeof clickTarget.click === 'function') clickTarget.click();
+            }, 500);
+          }, 500);
           done = true;
           break;
         } else {
