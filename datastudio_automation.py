@@ -31,13 +31,15 @@ def main():
     player_id = ""
     player_email = ""
     player_brand = ""
+    w_value = ""
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r") as f:
                 data = json.load(f)
-                player_id = data.get("id", "")
                 player_email = data.get("email", "")
+                player_id = data.get("id", "")
                 player_brand = data.get("brand", "")
+                w_value = data.get("w_value", "")
         except Exception:
             pass
             
@@ -130,6 +132,7 @@ def main():
                     ln = ln.strip()
                     city = city.strip()
                 
+    approval_status = "PENDING"
     if fn and ln:
         print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
         webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
@@ -162,10 +165,13 @@ def main():
             
         if dup_res == "YES":
             print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS FOUND FOR {fn} {ln}!!!\n{'='*60}\n")
+            approval_status = "Review (Duplicates)"
         elif dup_res == "NO":
             print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS VERIFIED FOR {ln} {city}!!!\n{'='*60}\n")
+            approval_status = "Review (Match)"
         else:
             print(f"[PLAYBISON] No duplicate accounts found for {fn} {ln}.")
+            approval_status = "Approve"
     
     # Detect name mismatch errors
     is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
@@ -174,6 +180,7 @@ def main():
         print(f"\n[PLAYBISON] Operator is COINSPAID. No copy required.")
     elif is_error:
         print(f"\n[PLAYBISON] Name mismatch or error: {verify_raw}")
+        approval_status = "Error (Name Mismatch)"
 
     
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
@@ -385,6 +392,8 @@ def main():
                 js_check_notes = load_macro("ds_check_notes.js")
                 
                 notes_have_req = False
+                has_doc_req = False
+                mistral_failed = False
                 for i in range(15):
                     pyperclip.copy("WAITING_FOR_NOTES")
                     pyperclip.copy(js_check_notes)
@@ -485,6 +494,7 @@ def main():
                             
                             if ai_msg.strip().upper().startswith("NO"):
                                 print("[PLAYBISON] Verification FAILED! Please check manually.")
+                                mistral_failed = True
                                 input("Press ENTER when you are ready to continue...")
                             else:
                                 print("[PLAYBISON] Verification PASSED! Automatically continuing in 3 seconds...")
@@ -795,9 +805,16 @@ def main():
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
                     
-                    # Columns A to K separated by Tabs
+                    # Columns A to M separated by Tabs
                     trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
-                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}"
+                    
+                    approval_status = "Approve"
+                    if dup_res == "YES":
+                        approval_status = "Review (Duplicates)"
+                    elif mistral_failed:
+                        approval_status = "Review (Mistral Failed)"
+                        
+                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1n-VC5cQAxhi2a2yC0VPWWSLRWg6NEQsKNv35UZoGbqI/edit?pli=1&gid=0#gid=0"

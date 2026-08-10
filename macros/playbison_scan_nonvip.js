@@ -40,12 +40,14 @@
       let idTh = ths.find(th => th.textContent.trim().toLowerCase() === 'id');
 
       let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
+      let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value');
 
       if (roleTh) {
         let roleIdx = ths.indexOf(roleTh);
         let loginIdx = loginTh ? ths.indexOf(loginTh) : -1;
         let idIdx = idTh ? ths.indexOf(idTh) : -1;
         let brandIdx = brandTh ? ths.indexOf(brandTh) : -1;
+        let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
         let trs = Array.from(doc.querySelectorAll('tbody tr'));
         if (trs.length === 0) continue;
 
@@ -53,6 +55,7 @@
         let foundEmail = "";
         let foundId = "";
         let foundBrand = "";
+        let foundWValue = "";
 
         for (let tr of trs) {
           let td = tr.children[roleIdx];
@@ -73,13 +76,17 @@
               let brandTd = tr.children[brandIdx];
               if (brandTd) foundBrand = brandTd.textContent.trim();
             }
+            if (wValueIdx !== -1) {
+              let wValueTd = tr.children[wValueIdx];
+              if (wValueTd) foundWValue = wValueTd.textContent.trim();
+            }
             break;
           }
         }
 
         if (foundTarget) {
           if (foundEmail) {
-            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand):", foundEmail + "|" + foundId + "|" + foundBrand);
+            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue);
           } else {
             alert("Found a non-VIP Role, but couldn't find the email in the login column.");
           }

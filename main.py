@@ -40,13 +40,14 @@ def main():
             email = parts[0] if len(parts) > 0 else clipboard_content
             player_id = parts[1] if len(parts) > 1 else ""
             brand = parts[2] if len(parts) > 2 else ""
+            w_value = parts[3] if len(parts) > 3 else ""
             
-            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand}")
+            print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value}")
             
             # Save session data for Data Studio step
             import json
             with open("last_user.json", "w") as f:
-                json.dump({"email": email, "id": player_id, "brand": brand}, f, indent=2)
+                json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value}, f, indent=2)
             
             # Put clean email in clipboard for Data Studio search input
             pyperclip.copy(email)
