@@ -77,8 +77,6 @@
             if (loginTd) emailVal = loginTd.textContent.trim().toLowerCase();
           }
           
-      
-          
           let td = tr.children[roleIdx];
           let roleVal = td ? td.textContent.trim() : "";
           if (td && !roleVal.toUpperCase().includes('VIP')) {
