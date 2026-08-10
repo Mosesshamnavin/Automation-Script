@@ -30,16 +30,31 @@
       if (brandOpt) {
         let row = brandOpt.closest('.row, [role="row"], [role="option"]') || brandOpt.parentElement.parentElement;
         if (row) {
-          let onlyBtn = Array.from(row.querySelectorAll('*')).find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'only');
-          if (onlyBtn) {
-            simClick(onlyBtn);
-          } else {
-            simClick(row);
-          }
+          row.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+          row.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true, view: window }));
+          
           setTimeout(() => {
-            simClick(document.body);
-            prompt('WD_FILTER:', 'SUCCESS');
-          }, 500);
+            let onlyBtn = Array.from(document.querySelectorAll('*')).find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === 'only' && e.getBoundingClientRect().width > 0);
+            
+            if (onlyBtn) {
+              simClick(onlyBtn);
+            } else {
+              // Fallback: uncheck the other brand(s) by clicking them
+              let allBrandOpts = Array.from(document.querySelectorAll('*')).filter(e => {
+                 let t = e.textContent.trim().toLowerCase();
+                 return e.children.length === 0 && (t === 'bison casino' || t === 'fireball' || t === 'lemon casino') && e.getBoundingClientRect().width > 0;
+              });
+              for (let opt of allBrandOpts) {
+                 if (opt.textContent.trim().toLowerCase() !== targetBrand) {
+                     simClick(opt);
+                 }
+              }
+            }
+            setTimeout(() => {
+              simClick(document.body);
+              prompt('WD_FILTER:', 'SUCCESS');
+            }, 500);
+          }, 400);
         } else {
           prompt('WD_FILTER:', 'ROW_NOT_FOUND');
         }

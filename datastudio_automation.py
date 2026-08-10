@@ -297,7 +297,7 @@ def main():
             print("[DATASTUDIO] Waiting 6 seconds for filtered data to load...")
             time.sleep(6.0)
             
-            print("[DATASTUDIO] Re-checking W/D ratio for Bison Casino...")
+            print(f"[DATASTUDIO] Re-checking W/D ratio for {player_brand.capitalize()}...")
             pyperclip.copy(js_macro_4)
             pyautogui.hotkey('ctrl', 'l')
             time.sleep(0.5)
