@@ -475,7 +475,9 @@
         });
 
         let resultLines = keys.map(k => `${k}*${globalCounts[k]}`);
-        doneCallback(resultLines.join('\n'));
+        let gamesArr = Array.from(globalGames);
+        let gamesStr = gamesArr.length > 0 ? '\n|GAMES:' + gamesArr.join('|') : '';
+        doneCallback(resultLines.join('\n') + gamesStr);
       }
     }
 

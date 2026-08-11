@@ -746,9 +746,38 @@ def main():
                             
                             if stack_date:
                                 print(f"[PLAYBISON] Stack Date: {stack_date}. Navigating to Bonuses tab to extract Bonus Name...")
+                                
+                                # ── Phase 1: Navigate current tab to BASE wallet URL ──────────
+                                wallet_base_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
+                                pyautogui.hotkey('ctrl', 'l')
+                                time.sleep(0.4)
+                                pyperclip.copy(wallet_base_url)
+                                pyautogui.hotkey('ctrl', 'a')
+                                time.sleep(0.1)
+                                pyautogui.hotkey('ctrl', 'v')
+                                time.sleep(0.2)
+                                pyautogui.press('enter')
+                                print("[PLAYBISON] Waiting 5 seconds for wallet page to reload...")
+                                time.sleep(5.0)
+
+                                # ── Phase 2: Click the Bonuses tab ───────────
+                                js_open_bonuses = load_macro("ds_open_bonuses.js")
+                                pyperclip.copy(js_open_bonuses)
+                                pyautogui.hotkey('ctrl', 'l')
+                                time.sleep(0.3)
+                                pyautogui.write('javascript:')
+                                time.sleep(0.2)
+                                pyautogui.hotkey('ctrl', 'v')
+                                time.sleep(0.3)
+                                pyautogui.press('enter')
+                                print("[PLAYBISON] Bonuses tab clicked. Waiting 5 seconds for data to load...")
+                                time.sleep(5.0)
+
+                                # ── Phase 3: Inject scan-only macro ──────────────────────────
                                 js_bonus = load_macro("ds_extract_bonus.js")
                                 js_bonus = js_bonus.replace("###STACK_DATE###", stack_date)
-                                pyperclip.copy("WAITING_FOR_BONUS")
+
+                                pyperclip.copy("__WAITING_BONUS__")
                                 pyperclip.copy(js_bonus)
                                 pyautogui.hotkey('ctrl', 'l')
                                 time.sleep(0.3)
@@ -758,19 +787,20 @@ def main():
                                 time.sleep(0.3)
                                 pyautogui.press('enter')
                                 
-                                print("[PLAYBISON] Waiting 5 seconds for Bonus table to process...")
+                                print("[PLAYBISON] Extracting Bonus Name (scanning up to 15 pages)...")
                                 bonus_name = ""
-                                for _ in range(15):
-                                    pyautogui.hotkey('ctrl', 'c')
+                                for _ in range(90):
                                     time.sleep(1.0)
                                     clip_val = pyperclip.paste().strip()
                                     if clip_val.startswith("BONUS_RESULT:"):
                                         bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
                                         break
                                 
-                                if bonus_name and bonus_name != "NOT_FOUND":
-                                    print(f"[PLAYBISON] Found Bonus Name: {bonus_name}")
+                                if bonus_name and bonus_name not in ("NOT_FOUND", ""):
+                                    print(f"[PLAYBISON] ✅ Found Bonus Name: {bonus_name}")
                                     trans_result = trans_result + f" | Bonus: {bonus_name}"
+                                else:
+                                    print(f"[PLAYBISON] ⚠️ No matching bonus found for date {stack_date}.")
                             
                             time.sleep(3.0)
                         break
