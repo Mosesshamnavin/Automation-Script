@@ -140,6 +140,53 @@
     return null;
   }
 
+  function findAmountInFromInput(container) {
+    if (!container) return null;
+    let inputs = Array.from(container.querySelectorAll('input'));
+
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+
+      let attrStr = (
+        (inp.placeholder || '') + ' ' +
+        (inp.name || '') + ' ' +
+        (inp.id || '') + ' ' +
+        (inp.getAttribute('ng-model') || '') + ' ' +
+        (inp.getAttribute('formcontrolname') || '') + ' ' +
+        (inp.getAttribute('aria-label') || '')
+      ).toLowerCase();
+
+      if (attrStr.includes('in') && attrStr.includes('from') && !attrStr.includes('out') && !attrStr.includes('to') && !attrStr.includes('date')) {
+        return inp;
+      }
+
+      let p = inp.parentElement;
+      for (let level = 0; level < 5 && p && p !== container; level++) {
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (t.includes('amount') && t.includes('in') && t.includes('from') && !t.includes('out') && !t.includes('to')) {
+          let childInputs = p.querySelectorAll('input');
+          if (childInputs.length <= 2) return inp;
+        }
+        p = p.parentElement;
+      }
+    }
+
+    let amountInputs = inputs.filter(inp => {
+      let p = inp.parentElement;
+      while (p && p !== container) {
+        let t = (p.textContent || '').toLowerCase();
+        if (t.includes('amount')) return true;
+        p = p.parentElement;
+      }
+      return false;
+    });
+
+    if (amountInputs.length >= 4) {
+      return amountInputs[2];
+    }
+    return null;
+  }
+
   function findTypeSelect(container) {
     if (!container) return null;
     let selects = Array.from(container.querySelectorAll('select'));
@@ -221,22 +268,34 @@
   }
 
   function hasBlankInResults(container) {
-    if (!container) return true;
+    if (!container) return { found: true, date: null };
     let { tbl, idx } = findNoteColIdx(container);
-    if (!tbl || idx === -1) return true;
+    if (!tbl || idx === -1) return { found: true, date: null };
 
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
-    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > idx);
+    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(1, idx));
 
-    if (dataRows.length === 0) return true;
+    if (dataRows.length === 0) return { found: true, date: null };
+
+    let dateIdx = 1;
+    for (let tr of allTrs) {
+      if (tr.querySelector('th')) {
+        let cells = Array.from(tr.children);
+        for (let i = 0; i < cells.length; i++) {
+          if (cells[i].textContent.toLowerCase().trim() === 'date') dateIdx = i;
+        }
+        break;
+      }
+    }
 
     for (let tr of dataRows) {
       let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
       if (txt === '' || !txt.includes('automatic')) {
-        return true;
+        let dateStr = tr.children[dateIdx] ? (tr.children[dateIdx].textContent || '').trim() : null;
+        return { found: true, date: dateStr };
       }
     }
-    return false;
+    return { found: false, date: null };
   }
 
   function getCurrency(container) {
@@ -283,6 +342,7 @@
   function computeAllPagesStack(container, doneCallback) {
     let globalCounts = {};
     let seenIds = new Set();
+    let globalGames = new Set();
 
     function parseCurrentPage(cont) {
       let tables = Array.from(cont.querySelectorAll('table'));
@@ -300,6 +360,7 @@
       let currIdx = -1;
       let bonusBeforeIdx = -1;
       let bonusAfterIdx = -1;
+      let noteIdx = -1;
 
       for (let tr of allTrs) {
         let cells = Array.from(tr.children);
@@ -315,8 +376,11 @@
             bonusBeforeIdx = i;
             if (i + 1 < cells.length) bonusAfterIdx = i + 1;
           }
+          if (txt === 'note' || (txt.includes('note') && txt.length < 10)) {
+            noteIdx = i;
+          }
         }
-        if (valIdx !== -1 && bonusBeforeIdx !== -1) break;
+        if (valIdx !== -1 && bonusBeforeIdx !== -1 && noteIdx !== -1) break;
       }
 
       if (valIdx === -1) {
@@ -328,6 +392,7 @@
         bonusBeforeIdx = 13;
         bonusAfterIdx = 14;
       }
+      if (noteIdx === -1) noteIdx = 15;
 
       let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(currIdx, bonusAfterIdx));
 
@@ -369,6 +434,15 @@
 
         let key = `${valFormatted}${currFormatted}`;
         globalCounts[key] = (globalCounts[key] || 0) + 1;
+
+        let noteStr = tr.children.length > noteIdx ? tr.children[noteIdx].textContent.trim() : '';
+        if (noteStr) {
+          let rIndex = noteStr.lastIndexOf('R:');
+          if (rIndex !== -1) {
+            let gName = noteStr.substring(0, rIndex).trim();
+            if (gName) globalGames.add(gName);
+          }
+        }
       }
     }
 
@@ -554,10 +628,12 @@
         setTimeout(() => {
           let freshDoc = getFrames()[0];
           let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
-          let blankFound = hasBlankInResults(freshModal);
+          let blankCheck = hasBlankInResults(freshModal);
+          let blankFound = blankCheck.found;
+          let blankDate = blankCheck.date;
 
           if (blankFound) {
-            let userCurr = getCurrency(freshModal) || 'PLN';
+            let userCurr = "###TCURR###".toUpperCase();
             let searchAmt = '-8.01';
             if (userCurr.includes('EUR')) searchAmt = '-2.01';
             else if (userCurr.includes('HUF')) searchAmt = '-800.01';
@@ -565,10 +641,21 @@
 
             let freshTypeSelect = findTypeSelect(freshModal) || findTypeSelect(freshDoc);
             let freshAmtInput = findAmountInToInput(freshModal) || findAmountInToInput(freshDoc);
+            let freshAmtFromInput = findAmountInFromInput(freshModal) || findAmountInFromInput(freshDoc);
+            let freshDateInput = findDateFromInput(freshModal) || findDateFromInput(freshDoc);
             let freshSearchBtn = findSearchButtonForInput(freshAmtInput || freshTypeSelect, freshDoc);
 
             if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
             if (freshAmtInput) setVal(freshAmtInput, searchAmt);
+            if (freshAmtFromInput) setVal(freshAmtFromInput, '-10000');
+            
+            if (freshDateInput && blankDate) {
+              let parsedDate = new Date(blankDate);
+              if (!isNaN(parsedDate.getTime())) {
+                let newVal = parsedDate.getFullYear() + "-" + String(parsedDate.getMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getDate()).padStart(2, "0") + " 00:00";
+                setVal(freshDateInput, newVal);
+              }
+            }
 
             setTimeout(() => {
               if (freshSearchBtn) simClick(freshSearchBtn);
@@ -577,7 +664,7 @@
                 let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
                 
                 let totalPages = getTotalPages(liveModal);
-                if (totalPages > 5) {
+                if (totalPages > 50) {
                   let stackDates = getStackDatesFromPage(liveModal);
                   copyToClipboard("TRANS_RESULT:EXCEEDS_5_PAGES|" + stackDates.join(','));
                   return;
@@ -585,7 +672,8 @@
                 
                 computeAllPagesStack(liveModal, function(stackResult) {
                   let resText = stackResult || "NO_STACK";
-                  copyToClipboard("TRANS_RESULT:" + resText);
+                  let dateStr = blankDate ? `|STACK_DATE:${blankDate}` : "";
+                  copyToClipboard("TRANS_RESULT:" + resText + dateStr);
                 });
               }, 4500);
             }, 800);

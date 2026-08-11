@@ -32,6 +32,7 @@ def main():
     player_email = ""
     player_brand = ""
     w_value = ""
+    t_curr = "PLN"
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r") as f:
@@ -40,6 +41,7 @@ def main():
                 player_id = data.get("id", "")
                 player_brand = data.get("brand", "")
                 w_value = data.get("w_value", "")
+                t_curr = data.get("t_curr", "PLN")
         except Exception:
             pass
             
@@ -519,6 +521,7 @@ def main():
 
                 # Step 2: Transactions & Stack Check macro
                 js_trans_macro = load_macro("ds_check_transactions.js")
+                js_trans_macro = js_trans_macro.replace("###TCURR###", t_curr)
                 pyperclip.copy("WAITING_FOR_TRANS")
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
@@ -538,6 +541,12 @@ def main():
                     clip_val = pyperclip.paste().strip()
                     if clip_val and clip_val.startswith("TRANS_RESULT:"):
                         trans_result = clip_val.replace("TRANS_RESULT:", "").strip()
+                        stack_date = ""
+                        if "|STACK_DATE:" in trans_result:
+                            parts = trans_result.split("|STACK_DATE:")
+                            trans_result = parts[0].strip()
+                            stack_date = parts[1].strip()
+
                         if trans_result in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
                             print(f"[PLAYBISON] No stack found ({trans_result}). Continuing flow automatically...")
                         elif trans_result.startswith("EXCEEDS_5_PAGES"):
@@ -734,6 +743,35 @@ def main():
                             time.sleep(3.0)
                         else:
                             print(f"\n{'='*60}\n[PLAYBISON] ⚠️ STACK TRANSACTIONS FOUND:\n{trans_result}\n{'='*60}\n")
+                            
+                            if stack_date:
+                                print(f"[PLAYBISON] Stack Date: {stack_date}. Navigating to Bonuses tab to extract Bonus Name...")
+                                js_bonus = load_macro("ds_extract_bonus.js")
+                                js_bonus = js_bonus.replace("###STACK_DATE###", stack_date)
+                                pyperclip.copy("WAITING_FOR_BONUS")
+                                pyperclip.copy(js_bonus)
+                                pyautogui.hotkey('ctrl', 'l')
+                                time.sleep(0.3)
+                                pyautogui.write('javascript:')
+                                time.sleep(0.2)
+                                pyautogui.hotkey('ctrl', 'v')
+                                time.sleep(0.3)
+                                pyautogui.press('enter')
+                                
+                                print("[PLAYBISON] Waiting 5 seconds for Bonus table to process...")
+                                bonus_name = ""
+                                for _ in range(15):
+                                    pyautogui.hotkey('ctrl', 'c')
+                                    time.sleep(1.0)
+                                    clip_val = pyperclip.paste().strip()
+                                    if clip_val.startswith("BONUS_RESULT:"):
+                                        bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
+                                        break
+                                
+                                if bonus_name and bonus_name != "NOT_FOUND":
+                                    print(f"[PLAYBISON] Found Bonus Name: {bonus_name}")
+                                    trans_result = trans_result + f" | Bonus: {bonus_name}"
+                            
                             time.sleep(3.0)
                         break
                 else:

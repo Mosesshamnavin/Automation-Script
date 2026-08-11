@@ -40,7 +40,8 @@
       let idTh = ths.find(th => th.textContent.trim().toLowerCase() === 'id');
 
       let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
-      let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value');
+      let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value' || th.textContent.trim().toLowerCase() === 'value w currency' || th.textContent.trim().toLowerCase() === 't value');
+      let tCurrTh = ths.find(th => th.textContent.trim().toLowerCase() === 't currency');
 
       if (roleTh) {
         let roleIdx = ths.indexOf(roleTh);
@@ -48,6 +49,7 @@
         let idIdx = idTh ? ths.indexOf(idTh) : -1;
         let brandIdx = brandTh ? ths.indexOf(brandTh) : -1;
         let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
+        let tCurrIdx = tCurrTh ? ths.indexOf(tCurrTh) : -1;
         let trs = Array.from(doc.querySelectorAll('tbody tr'));
         if (trs.length === 0) continue;
         
@@ -58,6 +60,7 @@
         let foundId = "";
         let foundBrand = "";
         let foundWValue = "";
+        let foundTCurr = "";
 
         window._processedBisonIds = window._processedBisonIds || new Set();
 
@@ -100,13 +103,17 @@
               let wValueTd = tr.children[wValueIdx];
               if (wValueTd) foundWValue = wValueTd.textContent.trim();
             }
+            if (tCurrIdx !== -1) {
+              let tCurrTd = tr.children[tCurrIdx];
+              if (tCurrTd) foundTCurr = tCurrTd.textContent.trim().toUpperCase();
+            }
             break;
           }
         }
 
         if (foundTarget) {
           if (foundEmail) {
-            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue);
+            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr);
           } else {
             alert("Found a non-VIP Role, but couldn't find the email in the login column.");
           }
