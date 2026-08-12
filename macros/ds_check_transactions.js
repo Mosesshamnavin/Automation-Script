@@ -93,6 +93,24 @@
     return null;
   }
 
+  function findDateToInput(container) {
+    if (!container) return null;
+    let inputs = Array.from(container.querySelectorAll('input'));
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let p = inp.parentElement;
+      for (let level = 0; level < 5 && p && p !== container; level++) {
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if ((t.includes('date to') || (t.includes('date') && t.includes('to'))) && !t.includes('date from') && !t.includes('registered')) {
+          let childInputs = p.querySelectorAll('input');
+          if (childInputs.length <= 2) return inp;
+        }
+        p = p.parentElement;
+      }
+    }
+    return null;
+  }
+
   function findAmountInToInput(container) {
     if (!container) return null;
     let inputs = Array.from(container.querySelectorAll('input'));
@@ -645,6 +663,7 @@
             let freshAmtInput = findAmountInToInput(freshModal) || findAmountInToInput(freshDoc);
             let freshAmtFromInput = findAmountInFromInput(freshModal) || findAmountInFromInput(freshDoc);
             let freshDateInput = findDateFromInput(freshModal) || findDateFromInput(freshDoc);
+            let freshDateToInput = findDateToInput(freshModal) || findDateToInput(freshDoc);
             let freshSearchBtn = findSearchButtonForInput(freshAmtInput || freshTypeSelect, freshDoc);
 
             if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
@@ -654,8 +673,16 @@
             if (freshDateInput && blankDate) {
               let parsedDate = new Date(blankDate);
               if (!isNaN(parsedDate.getTime())) {
-                let newVal = parsedDate.getFullYear() + "-" + String(parsedDate.getMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getDate()).padStart(2, "0") + " 00:00";
+                let newVal = parsedDate.getUTCFullYear() + "-" + String(parsedDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getUTCDate()).padStart(2, "0") + " 00:00";
                 setVal(freshDateInput, newVal);
+              }
+            }
+            if (freshDateToInput && blankDate) {
+              let parsedDate = new Date(blankDate);
+              if (!isNaN(parsedDate.getTime())) {
+                parsedDate.setUTCMinutes(parsedDate.getUTCMinutes() + 1);
+                let newVal = parsedDate.getUTCFullYear() + "-" + String(parsedDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getUTCDate()).padStart(2, "0") + " " + String(parsedDate.getUTCHours()).padStart(2, "0") + ":" + String(parsedDate.getUTCMinutes()).padStart(2, "0");
+                setVal(freshDateToInput, newVal);
               }
             }
 

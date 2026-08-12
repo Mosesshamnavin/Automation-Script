@@ -4,12 +4,27 @@ import pyautogui
 import webbrowser
 import sys
 import os
+import pyautogui
+
+pyautogui.FAILSAFE = False
 
 from macro_loader import load_macro
 
 def main():
-    print("Testing Analytics Flow for zuzawasilewska00@gmail.com...")
-    wallet_id = "30f1636b05b0e095301fccdb"
+    import json
+    player_email = "Werciagry@gmail.com"
+    wallet_id = "bfadaae74107ad283d2f7f6c"
+    
+    if os.path.exists("last_user.json"):
+        try:
+            with open("last_user.json", "r") as f:
+                data = json.load(f)
+                player_email = data.get("email", player_email)
+                wallet_id = data.get("wallet_id", data.get("id", wallet_id))
+        except Exception:
+            pass
+
+    print(f"Testing Analytics Flow for {player_email} (wallet: {wallet_id})...")
     wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
     
     print(f"Opening wallet tab: {wallet_url}")
@@ -359,6 +374,70 @@ def main():
                 sys.exit(0)
             else:
                 print(f"\n{'='*60}\n⚠️ STACK TRANSACTIONS FOUND:\n{trans_result}\n{'='*60}\n")
+                
+                stack_date = ""
+                if "|STACK_DATE:" in trans_result:
+                    parts = trans_result.split("|STACK_DATE:")
+                    trans_result = parts[0].strip()
+                    stack_date = parts[1].strip()
+
+                if stack_date:
+                    stack_date_ymd = stack_date.split("T")[0] if "T" in stack_date else stack_date.split(" ")[0]
+                    print(f"\n[PLAYBISON] Stack Date: {stack_date_ymd}. Navigating to Bonuses tab to extract Bonus Name...")
+                    
+                    wallet_base_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.4)
+                    pyperclip.copy(wallet_base_url)
+                    pyautogui.hotkey('ctrl', 'a')
+                    time.sleep(0.1)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.2)
+                    pyautogui.press('enter')
+                    print("[PLAYBISON] Waiting 5 seconds for wallet page to reload...")
+                    time.sleep(5.0)
+
+                    js_open_bonuses = load_macro("ds_open_bonuses.js")
+                    pyperclip.copy(js_open_bonuses)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    print("[PLAYBISON] Bonuses tab clicked. Waiting 5 seconds for data to load...")
+                    time.sleep(5.0)
+
+                    js_bonus = load_macro("ds_extract_bonus.js")
+                    js_bonus = js_bonus.replace("###STACK_DATE###", stack_date)
+
+                    pyperclip.copy("__WAITING_BONUS__")
+                    pyperclip.copy(js_bonus)
+                    pyautogui.hotkey('ctrl', 'l')
+                    time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
+                    pyautogui.hotkey('ctrl', 'v')
+                    time.sleep(0.3)
+                    pyautogui.press('enter')
+                    time.sleep(0.2)
+                    pyautogui.press('tab') # Move focus out of the address bar
+                    
+                    print("[PLAYBISON] Extracting Bonus Name...")
+                    bonus_name = ""
+                    for _ in range(90):
+                        pyautogui.hotkey('ctrl', 'c') # Copy from the hidden textarea selected by JS
+                        time.sleep(1.0)
+                        clip_val = pyperclip.paste().strip()
+                        if clip_val.startswith("BONUS_RESULT:"):
+                            bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
+                            break
+                    
+                    if bonus_name and not bonus_name.startswith("NOT_FOUND") and bonus_name != "":
+                        print(f"[PLAYBISON] ✅ Found Bonus Name: {bonus_name}")
+                    else:
+                        print(f"[PLAYBISON] ⚠️ No matching bonus found for date {stack_date_ymd}.")
             break
     else:
         print("Timeout.")

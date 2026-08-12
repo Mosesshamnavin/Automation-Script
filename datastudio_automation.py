@@ -342,6 +342,9 @@ def main():
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
+            if not wallet_id and player_id:
+                wallet_id = player_id
+
             if wallet_id:
                 wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
                 print(f"[PLAYBISON] Opening wallet_id in new tab: {wallet_url}")
@@ -745,7 +748,8 @@ def main():
                             print(f"\n{'='*60}\n[PLAYBISON] ⚠️ STACK TRANSACTIONS FOUND:\n{trans_result}\n{'='*60}\n")
                             
                             if stack_date:
-                                print(f"[PLAYBISON] Stack Date: {stack_date}. Navigating to Bonuses tab to extract Bonus Name...")
+                                stack_date_ymd = stack_date.split("T")[0] if "T" in stack_date else stack_date.split(" ")[0]
+                                print(f"[PLAYBISON] Stack Date: {stack_date_ymd}. Navigating to Bonuses tab to extract Bonus Name...")
                                 
                                 # ── Phase 1: Navigate current tab to BASE wallet URL ──────────
                                 wallet_base_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
@@ -796,11 +800,11 @@ def main():
                                         bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
                                         break
                                 
-                                if bonus_name and bonus_name not in ("NOT_FOUND", ""):
+                                if bonus_name and not bonus_name.startswith("NOT_FOUND") and bonus_name != "":
                                     print(f"[PLAYBISON] ✅ Found Bonus Name: {bonus_name}")
                                     trans_result = trans_result + f" | Bonus: {bonus_name}"
                                 else:
-                                    print(f"[PLAYBISON] ⚠️ No matching bonus found for date {stack_date}.")
+                                    print(f"[PLAYBISON] ⚠️ No matching bonus found for date {stack_date_ymd}.")
                             
                             time.sleep(3.0)
                         break
@@ -862,20 +866,13 @@ def main():
                         print("[PLAYBISON] 'req' keyword found in Notes tab! Switching to Documents tab...")
                     else:
                         print("[PLAYBISON] 'req' keyword found in Payment Log notes! Switching to Documents tab...")
-                    js_docs = """(function(){ 
-                        let tabs = Array.from(document.querySelectorAll('a, li, span, button'));
-                        let docTab = tabs.find(t => t.textContent.trim().toLowerCase() === 'documents');
-                        if (docTab) {
-                            docTab.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
-                            docTab.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
-                            docTab.dispatchEvent(new MouseEvent('click', {bubbles:true}));
-                        }
-                    })();"""
-                    js_docs_min = js_docs.replace('\n', ' ').replace('\r', '')
-                    pyperclip.copy(f"javascript:{js_docs_min}")
+                    js_docs_macro = load_macro("ds_open_documents.js")
+                    pyperclip.copy(js_docs_macro)
                     time.sleep(0.5)
                     pyautogui.hotkey('ctrl', 'l')
                     time.sleep(0.3)
+                    pyautogui.write('javascript:')
+                    time.sleep(0.2)
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
                     pyautogui.press('enter')
@@ -897,6 +894,25 @@ def main():
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
                     
+                    # Extract Games and Bonus for Columns N and O
+                    games_col = ""
+                    bonus_col = ""
+                    
+                    if " | Bonus: " in trans_result:
+                        parts = trans_result.split(" | Bonus: ")
+                        trans_result = parts[0]
+                        bonus_col = parts[1].strip()
+                        
+                    if "|GAMES:" in trans_result:
+                        parts = trans_result.split("|GAMES:")
+                        trans_result = parts[0].strip()
+                        games_rest = parts[1]
+                        if "|STACK_DATE:" in games_rest:
+                            games_col = games_rest.split("|STACK_DATE:")[0].strip()
+                        else:
+                            games_col = games_rest.strip()
+                        games_col = games_col.replace("|", ", ").strip()
+                    
                     # Columns A to M separated by Tabs
                     trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
                     
@@ -910,7 +926,7 @@ def main():
                     if notes_have_req or has_doc_req:
                         approval_status = "verify docs"
                         
-                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{last_deposit_id}\t{approval_status}"
+                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_id}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1n-VC5cQAxhi2a2yC0VPWWSLRWg6NEQsKNv35UZoGbqI/edit?pli=1&gid=0#gid=0"

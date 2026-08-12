@@ -31,11 +31,25 @@ import time
 import pyperclip
 from macro_loader import load_macro
 
-# ── Hardcoded test user ──────────────────────────────────────────────────────
-PLAYER_EMAIL  = "technityc@gmail.com"
-PLAYER_ID     = "133776"
-WALLET_ID     = "b54b2b21f0edd38a6c396eca"
-T_CURR        = "HUF"          # currency seen in transactions tab
+import os
+import json
+
+# ── Dynamic user loading from last_user.json ────────────────────────────────
+PLAYER_EMAIL  = ""
+PLAYER_ID     = ""
+WALLET_ID     = ""
+T_CURR        = "PLN"
+
+if os.path.exists("last_user.json"):
+    try:
+        with open("last_user.json", "r") as f:
+            data = json.load(f)
+            PLAYER_EMAIL = data.get("email", "")
+            PLAYER_ID    = data.get("id", "")
+            WALLET_ID    = data.get("wallet_id", data.get("id", ""))
+            T_CURR       = data.get("t_curr", "PLN")
+    except Exception:
+        pass
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -193,6 +207,7 @@ def main():
                     print("[STEP 3b] Waiting 5 seconds for wallet page to reload...")
                     time.sleep(5.0)
 
+                    stack_date_ymd = stack_date.split("T")[0] if "T" in stack_date else stack_date.split(" ")[0]
                     # ── Phase 2: Click the Bonuses tab (proven pattern) ───────────
                     js_open_bonuses = load_macro("ds_open_bonuses.js")
                     run_macro_via_addressbar(js_open_bonuses)
@@ -217,10 +232,10 @@ def main():
                             bonus_name = bval.replace("BONUS_RESULT:", "").strip()
                             break
 
-                    if bonus_name and bonus_name not in ("NOT_FOUND", ""):
+                    if bonus_name and not bonus_name.startswith("NOT_FOUND") and bonus_name != "":
                         print(f"[STEP 3b] ✅ Bonus: {bonus_name}")
                     else:
-                        print(f"[STEP 3b] No matching bonus found for date {stack_date}.")
+                        print(f"[STEP 3b] No matching bonus found for date {stack_date_ymd}.")
                         bonus_name = ""
             else:
                 games_list = []

@@ -78,6 +78,7 @@
   function scanCurrentPage(tbl) {
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
     let nameIdx = -1, dateIdx = -1;
+    let passedTarget = false;
 
     for (let tr of allTrs) {
       if (!tr.querySelector('th')) continue;
@@ -93,30 +94,33 @@
     if (nameIdx === -1) nameIdx = 2;
     if (dateIdx === -1) dateIdx = 4;
 
-    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(nameIdx, dateIdx));
+    let maxIdx = Math.max(nameIdx, dateIdx);
+    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > maxIdx);
     for (let tr of dataRows) {
       let rawDateStr = (tr.children[dateIdx].textContent || '').trim();
-      let cleanDateStr = rawDateStr.replace(/\s+/g, ''); // Removes spaces/newlines inside date
+      let cleanDateStr = rawDateStr.replace(/\s+/g, ' ').trim();
+      let parseableDateStr = cleanDateStr.replace(' ', 'T');
       let bonusName = (tr.children[nameIdx].textContent || '').trim();
-
       if (!bonusName) continue;
 
-      // Exact match check
-      if (cleanDateStr.includes(targetDateYMD)) {
+      if (cleanDateStr.includes(targetDateYMD) || parseableDateStr.includes(targetDateYMD)) {
         return { exact: true, name: bonusName };
       }
 
-      // Track closest match
-      let rowTime = new Date(cleanDateStr).getTime();
+      let rowTime = new Date(parseableDateStr).getTime();
       if (!isNaN(rowTime) && !isNaN(targetTime)) {
         let diff = Math.abs(rowTime - targetTime);
         if (diff < minDiff) {
           minDiff = diff;
           closestBonus = bonusName;
         }
+        if (rowTime < targetTime) {
+          passedTarget = true;
+        }
       }
     }
-    return { exact: false };
+    
+    return { exact: false, stopScan: passedTarget };
   }
 
   // ── Find Next button in the historical section ────────────────────────────
@@ -174,6 +178,10 @@
     let result = scanCurrentPage(found.tbl);
     if (result && result.exact) {
       copyToClipboard("BONUS_RESULT:" + result.name);
+      return;
+    }
+    if (result && result.stopScan && closestBonus) {
+      finishScan();
       return;
     }
 
