@@ -83,6 +83,10 @@ def main():
     
     print("Executing Phase 4: Auto-scanning backwards for non-VIP roles...")
     
+    # Ensure Chrome is focused on Tab 1 (Playbison BO)
+    pyautogui.hotkey('ctrl', '1')
+    time.sleep(0.5)
+    
     # Macro 4: Scan table for non-VIP roles, extract email and ID, and loop via Previous button
     js_macro_4 = load_macro("playbison_scan_nonvip.js")
     pyperclip.copy(js_macro_4)

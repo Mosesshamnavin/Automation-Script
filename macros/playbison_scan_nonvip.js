@@ -123,7 +123,14 @@
         let prevBtn = findPrevButton(doc);
         if (prevBtn) {
           if (prevBtn.disabled || prevBtn.classList.contains('disabled') || prevBtn.parentElement.classList.contains('disabled')) {
-            alert("Scanned all the way to the first page! No non-VIP roles found.");
+            try {
+              let ta = document.createElement('textarea');
+              ta.value = 'FINISHED_SCAN';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            } catch(e){}
             return;
           }
           let oldPageNum = getCurrentPage(doc);
@@ -142,12 +149,34 @@
           }, 500);
           return;
         } else {
-          alert("Could not find the Previous button to go back.");
+          try {
+            let ta = document.createElement('textarea');
+            ta.value = 'FINISHED_SCAN';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch(e){}
           return;
         }
       }
     }
-    alert("Could not find the 'roles' column in the table.");
+
+    // If roles column not found on first attempt, retry up to 5 times before stopping
+    window._rolesRetryCount = (window._rolesRetryCount || 0) + 1;
+    if (window._rolesRetryCount <= 5) {
+      setTimeout(checkPage, 1500);
+    } else {
+      window._rolesRetryCount = 0;
+      try {
+        let ta = document.createElement('textarea');
+        ta.value = 'FINISHED_SCAN';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch(e){}
+    }
   }
 
   checkPage();
