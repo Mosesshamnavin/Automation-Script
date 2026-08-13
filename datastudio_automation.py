@@ -33,6 +33,7 @@ def main():
     player_brand = ""
     w_value = ""
     t_curr = "PLN"
+    id_date = ""
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r") as f:
@@ -42,6 +43,7 @@ def main():
                 player_brand = data.get("brand", "")
                 w_value = data.get("w_value", "")
                 t_curr = data.get("t_curr", "PLN")
+                id_date = data.get("id_date", "")
         except Exception:
             pass
             
@@ -234,11 +236,17 @@ def main():
     pyautogui.press('enter')
     
     print("Waiting for Date Picker to open...")
-    time.sleep(1)
+    time.sleep(1.5)
     
-    print("Executing Phase 3: Setting the Date Range (2 months ago -> today)...")
-    # Macro 3: Navigate calendar back 1 month (to get 2 months ago), select days, click Apply
-    js_macro_3 = load_macro("ds_set_date_range.js")
+    print("Executing Phase 3: Setting the Date Range (61 days ago -> today)...")
+    end_wd = datetime.datetime.now(datetime.timezone.utc).date()
+    start_wd = end_wd - datetime.timedelta(days=61)
+    print(f"[DATASTUDIO] W/D UTC range: {start_wd} -> {end_wd}")
+    js_macro_3 = load_macro(
+        "ds_set_date_range.js",
+        START_DATE=start_wd.strftime("%Y-%m-%d"),
+        END_DATE=end_wd.strftime("%Y-%m-%d"),
+    )
     
     pyperclip.copy(js_macro_3)
     pyautogui.hotkey('ctrl', 'l')
@@ -249,8 +257,8 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    print("\nWaiting 6 seconds for Data Studio report table to update...")
-    time.sleep(6)
+    print("\nWaiting 8 seconds for Data Studio report table to update...")
+    time.sleep(8)
     
     print("Executing Phase 4: Checking W/D ratio (volumes)...")
     # Macro 4: Read W/D ratio (volumes) from Data Studio table using robust multi-tier search
@@ -397,7 +405,7 @@ def main():
                 print("[PLAYBISON] Waiting 5 seconds for notes data to load...")
                 time.sleep(5.0)
 
-                # Step 1.5: Check Notes for "req" keyword
+                # Step 1.5: Check top note for "req" or "rem" keyword
                 print("[PLAYBISON] Checking Notes tab data (waiting for table to load)...")
                 js_check_notes = load_macro("ds_check_notes.js")
                 
@@ -426,12 +434,12 @@ def main():
                             if note_txt != "NOTES_NOT_FOUND":
                                 if parts[0] == "YES":
                                     notes_have_req = True
-                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Contains 'req': {notes_have_req})")
+                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req})")
                                 break
                     time.sleep(0.5)
 
                 if notes_have_req:
-                    print("[PLAYBISON] Keyword 'req' detected in notes, but document checking is disabled for LOOP mode. Skipping Mistral.")
+                    print("[PLAYBISON] Keyword 'req' or 'rem' detected in top note, but document checking is disabled for LOOP mode. Skipping Mistral.")
                     
                 if False: # Bypass for loop mode
                     print("[PLAYBISON] Keyword 'req' detected in notes! Opening Documents tab...")
@@ -863,7 +871,7 @@ def main():
                 
                 if notes_have_req or has_doc_req:
                     if notes_have_req:
-                        print("[PLAYBISON] 'req' keyword found in Notes tab! Switching to Documents tab...")
+                        print("[PLAYBISON] 'req' or 'rem' keyword found in top note! Switching to Documents tab...")
                     else:
                         print("[PLAYBISON] 'req' keyword found in Payment Log notes! Switching to Documents tab...")
                     js_docs_macro = load_macro("ds_open_documents.js")
@@ -888,9 +896,10 @@ def main():
                 
                 if extracted_id and extracted_id.isdigit():
                     print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
-                    from datetime import datetime
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
+                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    sheet_date = id_date or now_str
+                    print(f"[GOOGLE SHEETS] Date & Time (ID date): {sheet_date}")
+                     
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
                     
@@ -924,12 +933,12 @@ def main():
                         approval_status = "Review (Mistral Failed)"
                         
                     if notes_have_req or has_doc_req:
-                        approval_status = "verify docs"
+                        approval_status = "Verify docs"
                         
-                    row_data = f"{now_str}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_id}\t{approval_status}"
+                    row_data = f"{sheet_date}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_id}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
-                    target_url = "https://docs.google.com/spreadsheets/d/1n-VC5cQAxhi2a2yC0VPWWSLRWg6NEQsKNv35UZoGbqI/edit?pli=1&gid=0#gid=0"
+                    target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"
                     print(f"[GOOGLE SHEETS] Opening {target_url} in a new tab...")
                     
                     # Open Google Sheets

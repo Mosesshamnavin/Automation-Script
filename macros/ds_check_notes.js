@@ -69,7 +69,9 @@
   }
 
   let text = checkNotes();
-  let hasReq = (text && text.toLowerCase().includes('req')) ? "YES" : "NO";
+  let lower = (text || '').toLowerCase();
+  let needsVerifyDocs = /\breq\b/.test(lower) || /\brem\b/.test(lower);
+  let hasReq = needsVerifyDocs ? "YES" : "NO";
   let input = document.createElement('input');
   input.value = "REQ_FOUND:" + hasReq + "|TEXT:" + (text ? text.replace(/[\r\n]+/g, ' ') : "NOTES_NOT_FOUND");
   document.body.appendChild(input);

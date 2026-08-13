@@ -52,13 +52,14 @@ def main():
                 brand = parts[2] if len(parts) > 2 else ""
                 w_value = parts[3] if len(parts) > 3 else ""
                 t_curr = parts[4] if len(parts) > 4 else "PLN"
+                id_date = parts[5] if len(parts) > 5 else ""
                 
-                print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value} | T-Curr: {t_curr}")
+                print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value} | T-Curr: {t_curr} | ID Date: {id_date}")
                 
                 # Save session data for Data Studio step
                 import json
                 with open("last_user.json", "w") as f:
-                    json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value, "t_curr": t_curr}, f, indent=2)
+                    json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value, "t_curr": t_curr, "id_date": id_date}, f, indent=2)
                 
                 # Put clean email in clipboard for Data Studio search input
                 pyperclip.copy(email)
@@ -87,9 +88,13 @@ def main():
         # 5. Execute Step 2 (Data Studio)
         print("\n--- STARTING STEP 2: DATA STUDIO ---")
         try:
-            subprocess.run([sys.executable, "datastudio_automation.py", "--auto"])
+            ds_run = subprocess.run([sys.executable, "datastudio_automation.py", "--auto"])
         except Exception as e:
             print(f"Error running datastudio_automation.py: {e}")
+            break
+
+        if ds_run.returncode != 0:
+            print(f"\n[MAIN] Data Studio step crashed (exit code {ds_run.returncode}). Stopping so this ID is not skipped.")
             break
             
         print("\n[MAIN] Finished processing this ID. Looping back to Playbison...\n")

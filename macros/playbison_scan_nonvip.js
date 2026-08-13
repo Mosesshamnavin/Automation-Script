@@ -42,6 +42,7 @@
       let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
       let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value' || th.textContent.trim().toLowerCase() === 'value w currency' || th.textContent.trim().toLowerCase() === 't value');
       let tCurrTh = ths.find(th => th.textContent.trim().toLowerCase() === 't currency');
+      let dateTh = ths.find(th => th.textContent.trim().toLowerCase() === 'date');
 
       if (roleTh) {
         let roleIdx = ths.indexOf(roleTh);
@@ -50,6 +51,7 @@
         let brandIdx = brandTh ? ths.indexOf(brandTh) : -1;
         let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
         let tCurrIdx = tCurrTh ? ths.indexOf(tCurrTh) : -1;
+        let dateIdx = dateTh ? ths.indexOf(dateTh) : -1;
         let trs = Array.from(doc.querySelectorAll('tbody tr'));
         if (trs.length === 0) continue;
         
@@ -61,6 +63,7 @@
         let foundBrand = "";
         let foundWValue = "";
         let foundTCurr = "";
+        let foundDate = "";
 
         window._processedBisonIds = window._processedBisonIds || new Set();
 
@@ -107,13 +110,20 @@
               let tCurrTd = tr.children[tCurrIdx];
               if (tCurrTd) foundTCurr = tCurrTd.textContent.trim().toUpperCase();
             }
+            if (dateIdx !== -1) {
+              let dateTd = tr.children[dateIdx];
+              if (dateTd) {
+                foundDate = (dateTd.textContent || '').replace(/\s+/g, ' ').trim();
+                foundDate = foundDate.replace(/[+-]\d{2}:\d{2}$/, '').trim();
+              }
+            }
             break;
           }
         }
 
         if (foundTarget) {
           if (foundEmail) {
-            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr);
+            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr|IDDate):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate);
           } else {
             alert("Found a non-VIP Role, but couldn't find the email in the login column.");
           }
