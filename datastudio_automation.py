@@ -937,7 +937,32 @@ def main():
                     if notes_have_req or has_doc_req:
                         approval_status = "Verify docs"
                         
-                    row_data = f"{sheet_date}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
+                    # Check deposit operator vs withdrawal operator rules:
+                    # If last deposit operator is Skrill, Paysafecard, or Coinspaid,
+                    # withdrawal MUST be requested from that exact same operator.
+                    # Otherwise, set approval status to "Cancel (Mismatch Operator)".
+                    dep_norm = last_deposit_op.upper().replace(" ", "").replace("_", "").replace("-", "") if last_deposit_op else ""
+                    with_norm = withdrawal_op.upper().replace(" ", "").replace("_", "").replace("-", "") if withdrawal_op else ""
+                    
+                    restricted_dep = None
+                    if "SKRILL" in dep_norm:
+                        restricted_dep = "SKRILL"
+                    elif "PAYSAFECARD" in dep_norm or "PAYSAFE" in dep_norm:
+                        restricted_dep = "PAYSAFECARD"
+                    elif "COINSPAID" in dep_norm:
+                        restricted_dep = "COINSPAID"
+                    
+                    if restricted_dep:
+                        req_keyword = "PAYSAFE" if restricted_dep == "PAYSAFECARD" else restricted_dep
+                        if req_keyword not in with_norm:
+                            print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
+                            approval_status = "Cancel (Mismatch Operator)"
+                        
+                    w_value_display = str(w_value).strip()
+                    if w_value_display and t_curr and t_curr.strip().upper() not in w_value_display.upper():
+                        w_value_display = f"{w_value_display} {t_curr.strip().upper()}"
+                        
+                    row_data = f"{sheet_date}\t{extracted_id}\t{fn} {ln}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"
@@ -946,8 +971,8 @@ def main():
                     # Open Google Sheets
                     webbrowser.open_new_tab(target_url)
                     
-                    print("[GOOGLE SHEETS] Waiting 10 seconds for Google Sheets to fully load...")
-                    time.sleep(10.0)
+                    print("[GOOGLE SHEETS] Waiting 7 seconds for Google Sheets to fully load...")
+                    time.sleep(7.0)
                     
                     print("[GOOGLE SHEETS] Navigating to the next empty row...")
                     # Go to the bottom right of the sheet
