@@ -846,28 +846,30 @@ def main():
                 pyautogui.press('enter')
                 
                 time.sleep(1.0)
-                last_deposit_val = pyperclip.paste().strip()
-                last_deposit_id = "NOT_FOUND"
-                last_deposit_op = playbison_op
+                payment_log_val = pyperclip.paste().strip()
+                last_deposit_op = "NOT_FOUND"
+                withdrawal_op = playbison_op
                 has_doc_req = False
                 
-                if last_deposit_val.startswith("DEP_ID:"):
-                    id_part = last_deposit_val.replace("DEP_ID:", "")
-                    if "|OP:" in id_part:
-                        parts = id_part.split("|OP:")
-                        last_deposit_id = parts[0]
-                        op_doc_part = parts[1]
-                        if "|DOC:" in op_doc_part:
-                            op_parts = op_doc_part.split("|DOC:")
-                            last_deposit_op = op_parts[0]
+                if payment_log_val.startswith("DEP_OP:"):
+                    dep_part = payment_log_val.replace("DEP_OP:", "")
+                    if "|WITH_OP:" in dep_part:
+                        parts = dep_part.split("|WITH_OP:")
+                        last_deposit_op = parts[0]
+                        with_doc_part = parts[1]
+                        if "|DOC:" in with_doc_part:
+                            op_parts = with_doc_part.split("|DOC:")
+                            if op_parts[0] != "NOT_FOUND":
+                                withdrawal_op = op_parts[0]
                             if op_parts[1] == "YES":
                                 has_doc_req = True
                         else:
-                            last_deposit_op = op_doc_part
+                            if with_doc_part != "NOT_FOUND":
+                                withdrawal_op = with_doc_part
                     else:
-                        last_deposit_id = id_part
+                        last_deposit_op = dep_part
                 
-                print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
+                print(f"[PLAYBISON] Extracted Last Deposit Operator: {last_deposit_op} | Withdrawal Operator: {withdrawal_op}")
                 
                 if notes_have_req or has_doc_req:
                     if notes_have_req:
@@ -886,8 +888,8 @@ def main():
                     pyautogui.press('enter')
                     time.sleep(2.0)
                 
-                if last_deposit_id != "NOT_FOUND":
-                    print(f"[PLAYBISON] Extracted Last Deposit ID: {last_deposit_id} (Operator: {last_deposit_op})")
+                if last_deposit_op != "NOT_FOUND":
+                    print(f"[PLAYBISON] Extracted Last Deposit Operator: {last_deposit_op} | Withdrawal Operator: {withdrawal_op}")
                 else:
                     print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
                 
@@ -935,7 +937,7 @@ def main():
                     if notes_have_req or has_doc_req:
                         approval_status = "Verify docs"
                         
-                    row_data = f"{sheet_date}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{last_deposit_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_id}\t{approval_status}"
+                    row_data = f"{sheet_date}\t{player_email}\t{extracted_id}\t{w_value}\t{fn} {ln}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"

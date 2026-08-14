@@ -50,15 +50,26 @@
           }
         }
 
-        if (depositRow && depositRow.children.length > idIdx) {
-          let depId = depositRow.children[idIdx].textContent.trim();
-          let opName = "NO_MATCH";
-          if (opIdx !== -1 && depositRow.children.length > opIdx) {
-            opName = depositRow.children[opIdx].textContent.trim();
+        let withdrawRow = dataRows.find(tr => {
+          if (tr.children.length > typeIdx) {
+            let typeVal = tr.children[typeIdx].textContent.trim().toUpperCase();
+            return typeVal === 'WITHDRAW';
           }
-          depositInfo = { id: depId, op: opName, req: hasReq };
-          break;
+          return false;
+        });
+
+        let depOpName = "NOT_FOUND";
+        if (depositRow && opIdx !== -1 && depositRow.children.length > opIdx) {
+          depOpName = depositRow.children[opIdx].textContent.trim();
         }
+
+        let withOpName = "NOT_FOUND";
+        if (withdrawRow && opIdx !== -1 && withdrawRow.children.length > opIdx) {
+          withOpName = withdrawRow.children[opIdx].textContent.trim();
+        }
+
+        depositInfo = { depOp: depOpName, withOp: withOpName, req: hasReq };
+        break;
       }
     }
     if (depositInfo) break;
@@ -66,7 +77,7 @@
 
   if (depositInfo) {
     let input = document.createElement('input');
-    input.value = "DEP_ID:" + depositInfo.id + "|OP:" + depositInfo.op + "|DOC:" + depositInfo.req;
+    input.value = "DEP_OP:" + depositInfo.depOp + "|WITH_OP:" + depositInfo.withOp + "|DOC:" + depositInfo.req;
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');
@@ -75,7 +86,7 @@
   }
 
   let input = document.createElement('input');
-  input.value = "DEP_ID:NOT_FOUND";
+  input.value = "DEP_OP:NOT_FOUND|WITH_OP:NOT_FOUND|DOC:NO";
   document.body.appendChild(input);
   input.select();
   document.execCommand('copy');
