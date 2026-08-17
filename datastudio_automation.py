@@ -834,6 +834,8 @@ def main():
                 time.sleep(6.0)
                 
                 # Extract the last deposit ID from the Payment Log
+                # The JS macro uses setInterval polling up to 10s for AJAX table load.
+                # Python must wait at least 11s to ensure polling has finished.
                 js_get_last_deposit = load_macro("ds_get_last_deposit.js")
                 pyperclip.copy('WAITING')
                 pyperclip.copy(js_get_last_deposit)
@@ -845,7 +847,8 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 
-                time.sleep(1.0)
+                # Wait 11s for JS polling (20 × 500ms = 10s max) to complete
+                time.sleep(11.0)
                 payment_log_val = pyperclip.paste().strip()
                 last_deposit_op = "NOT_FOUND"
                 withdrawal_op = playbison_op
@@ -868,6 +871,10 @@ def main():
                                 withdrawal_op = with_doc_part
                     else:
                         last_deposit_op = dep_part
+                
+                # Final fallback: if withdrawal_op is still empty/NOT_FOUND, use playbison_op from modal
+                if not withdrawal_op or withdrawal_op in ["NOT_FOUND", "NO MATCHES FOUND"]:
+                    withdrawal_op = playbison_op if playbison_op else "NOT_FOUND"
                 
                 print(f"[PLAYBISON] Extracted Last Deposit Operator: {last_deposit_op} | Withdrawal Operator: {withdrawal_op}")
                 
@@ -957,6 +964,13 @@ def main():
                         if req_keyword not in with_norm:
                             print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
                             approval_status = "Cancel (Mismatch Operator)"
+                    
+                    # Credit Card last deposit always requires CC verification
+                    # Flag as "Verify docs" unless already a harder status like Cancel
+                    if "CREDITCARD" in dep_norm or "CREDIT" in dep_norm or "PAYMENTIQCREDITCARD" in dep_norm:
+                        if approval_status not in ["Cancel (Mismatch Operator)", "Review (Duplicates)"]:
+                            print(f"[PLAYBISON] Last deposit via Credit Card ('{last_deposit_op}'). Flagging as 'Verify docs' — CC verification required.")
+                            approval_status = "Verify docs"
                         
                     w_value_display = str(w_value).strip()
                     if w_value_display and t_curr and t_curr.strip().upper() not in w_value_display.upper():

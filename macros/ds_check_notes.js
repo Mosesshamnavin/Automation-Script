@@ -70,7 +70,18 @@
 
   let text = checkNotes();
   let lower = (text || '').toLowerCase();
-  let needsVerifyDocs = /\breq\b/.test(lower) || /\brem\b/.test(lower);
+  // Trigger Verify docs for:
+  // - 'req' / 'rem' keywords
+  // - 'waiting for cc' or 'cc ' (credit card doc pending)
+  // - 'waiting for doc' / 'send doc'
+  let needsVerifyDocs = /\breq\b/.test(lower)
+    || /\brem\b/.test(lower)
+    || lower.includes('waiting for cc')
+    || /\bcc\s+\d/.test(lower)
+    || lower.includes('waiting for doc')
+    || lower.includes('send doc')
+    || lower.includes('verify cc')
+    || lower.includes('verify card');
   let hasReq = needsVerifyDocs ? "YES" : "NO";
   let input = document.createElement('input');
   input.value = "REQ_FOUND:" + hasReq + "|TEXT:" + (text ? text.replace(/[\r\n]+/g, ' ') : "NOTES_NOT_FOUND");

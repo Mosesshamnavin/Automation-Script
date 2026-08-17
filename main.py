@@ -51,15 +51,28 @@ def main():
                 player_id = parts[1] if len(parts) > 1 else ""
                 brand = parts[2] if len(parts) > 2 else ""
                 w_value = parts[3] if len(parts) > 3 else ""
-                t_curr = parts[4] if len(parts) > 4 else "PLN"
+                t_curr = (parts[4].strip() if len(parts) > 4 and parts[4].strip() else "PLN")
                 id_date = parts[5] if len(parts) > 5 else ""
+                wallet_id = parts[6] if len(parts) > 6 else ""
+                operator = parts[7] if len(parts) > 7 else ""
+                name = parts[8] if len(parts) > 8 else ""
                 
-                print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value} | T-Curr: {t_curr} | ID Date: {id_date}")
+                print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value} | T-Curr: {t_curr} | Wallet ID: {wallet_id} | Operator: {operator} | Name: {name}")
                 
                 # Save session data for Data Studio step
                 import json
                 with open("last_user.json", "w") as f:
-                    json.dump({"email": email, "id": player_id, "brand": brand, "w_value": w_value, "t_curr": t_curr, "id_date": id_date}, f, indent=2)
+                    json.dump({
+                        "email": email,
+                        "id": player_id,
+                        "brand": brand,
+                        "w_value": w_value,
+                        "t_curr": t_curr,
+                        "id_date": id_date,
+                        "wallet_id": wallet_id,
+                        "operator": operator,
+                        "name": name
+                    }, f, indent=2)
                 
                 # Put clean email in clipboard for Data Studio search input
                 pyperclip.copy(email)
