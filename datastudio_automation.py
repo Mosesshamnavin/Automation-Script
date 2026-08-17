@@ -7,7 +7,116 @@ import re
 import webbrowser
 import datetime
 import sys
+import urllib.request
 from macro_loader import load_macro
+
+# Cache live exchange rates per session to avoid repeated API calls
+_fx_rate_cache = {}
+
+def convert_to_pln(amount_str, currency, pyautogui_ref=None, pyperclip_ref=None, time_ref=None, webbrowser_ref=None, load_macro_ref=None):
+    """Convert an amount in a given currency to PLN.
+    Primary: opens a Google search tab in Chrome and scrapes the real-time result.
+    Fallback: Frankfurter ECB API.
+    Returns a tuple: (pln_amount_str, note_str)
+    """
+    currency = (currency or "PLN").strip().upper()
+    if currency == "PLN":
+        return amount_str, ""
+
+    try:
+        amount = float(str(amount_str).replace(",", ".").strip())
+    except ValueError:
+        return amount_str, ""
+
+    # --- Browser tab method (primary) ---
+    if pyautogui_ref and pyperclip_ref and time_ref and webbrowser_ref and load_macro_ref:
+        try:
+            search_url = f"https://www.google.com/search?q={amount_str}+{currency}+to+PLN&hl=en"
+            print(f"[FX] Opening Google conversion tab: {amount_str} {currency} to PLN...")
+            webbrowser_ref.open_new_tab(search_url)
+            time_ref.sleep(4.0)
+
+            # Inject the scraper macro
+            js_fx = load_macro_ref("gs_get_currency.js")
+            pyperclip_ref.copy("FX_WAITING")
+            pyautogui_ref.hotkey('ctrl', 'l')
+            time_ref.sleep(0.3)
+            pyautogui_ref.write('javascript:')
+            time_ref.sleep(0.2)
+            pyautogui_ref.hotkey('ctrl', 'v')
+            time_ref.sleep(0.3)
+            pyautogui_ref.press('enter')
+
+            # Wait for the macro to copy the result
+            time_ref.sleep(2.0)
+            clip = pyperclip_ref.paste().strip()
+
+            # Close the Google tab
+            pyautogui_ref.hotkey('ctrl', 'w')
+            time_ref.sleep(0.5)
+
+            if clip.startswith("FX_RESULT:") and not clip.endswith("FAILED"):
+                result_str = clip.replace("FX_RESULT:", "").strip()
+                pln_amount = round(float(result_str), 2)
+                note = f"{amount_str} {currency} = {pln_amount:.2f} PLN (Google live rate)"
+                print(f"[FX] {note}")
+                return f"{pln_amount:.2f}", note
+            else:
+                print(f"[FX] Google scrape returned: {clip!r}. Trying API fallback...")
+        except Exception as e:
+            print(f"[FX] Browser conversion error: {e}. Trying API fallback...")
+
+    # --- API fallback (Frankfurter ECB) ---
+    global _fx_rate_cache
+    if currency not in _fx_rate_cache:
+        try:
+            url = f"https://api.frankfurter.app/latest?from={currency}&to=PLN"
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = json.loads(resp.read().decode())
+                rate_to_pln = data.get("rates", {}).get("PLN")
+                if rate_to_pln:
+                    _fx_rate_cache[currency] = float(rate_to_pln)
+                    print(f"[FX] ECB API rate: 1 {currency} = {rate_to_pln} PLN")
+                else:
+                    print(f"[FX] WARNING: PLN rate not found for {currency}. Keeping original.")
+                    return f"{amount_str} {currency}", ""
+        except Exception as e:
+            print(f"[FX] WARNING: API also failed for {currency}: {e}. Keeping original.")
+            return f"{amount_str} {currency}", ""
+
+    rate = _fx_rate_cache[currency]
+    pln_amount = round(amount * rate, 2)
+    note = f"{amount_str} {currency} = {pln_amount:.2f} PLN (ECB API fallback)"
+    print(f"[FX] {note}")
+    return f"{pln_amount:.2f}", note
+
+
+
+
+def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=False, datastudio_opened=False, duplicates_opened=False):
+    print("[DATASTUDIO] Closing opened auxiliary tabs to return to Playbison...")
+    if sheets_opened:
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+    if analytics_opened:
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+    if wallet_opened:
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+    if datastudio_opened:
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+    if duplicates_opened:
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+    
+    # Always ensure Chrome focuses on Tab 1 (Main Playbison table)
+    time.sleep(0.5)
+    pyautogui.hotkey('ctrl', '1')
+    time.sleep(0.5)
+
 
 def main():
     print("============================================================")
@@ -15,6 +124,14 @@ def main():
     print("============================================================")
     import sys
     
+    # Track opened auxiliary tabs to close only what was opened
+    duplicates_opened = False
+    datastudio_opened = False
+    wallet_opened = False
+    analytics_opened = False
+    sheets_opened = False
+    true_player_name = ""
+
     print("\nINSTRUCTIONS:")
     print("1. Your email should already be copied to your clipboard.")
     print("2. Press ENTER to open Data Studio and start the macro.")
@@ -139,6 +256,7 @@ def main():
     approval_status = "PENDING"
     if fn and ln:
         print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
+        duplicates_opened = True
         webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
         time.sleep(6.0)
         
@@ -188,6 +306,7 @@ def main():
 
     
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
+    datastudio_opened = True
     webbrowser.open_new_tab(url)
     
     print("\nWaiting 9 seconds for Data Studio to fully load...")
@@ -340,10 +459,7 @@ def main():
         if True: 
             if ratio_val >= 25.0:
                 print(f"[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%)! Closing tabs and terminating flow early.")
-                pyautogui.hotkey('ctrl', 'w') # Close Data Studio
-                time.sleep(0.5)
-                pyautogui.hotkey('ctrl', 'w') # Close Duplicates tab
-                time.sleep(0.5)
+                cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
                 sys.exit(0)
             else:
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)! Proceeding to Playbison for manual cancellation check!")
@@ -356,6 +472,7 @@ def main():
             if wallet_id:
                 wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
                 print(f"[PLAYBISON] Opening wallet_id in new tab: {wallet_url}")
+                wallet_opened = True
                 webbrowser.open_new_tab(wallet_url)
                 
                 print("[PLAYBISON] Waiting 7 seconds for wallet page to load to open notes...")
@@ -376,15 +493,25 @@ def main():
                 time.sleep(1.0)
                 clipboard_res = pyperclip.paste().strip()
                 true_player_name = ""
+                wallet_email = ""
                 if "|NAME:" in clipboard_res:
                     parts = clipboard_res.split("|NAME:")
                     true_player_id = parts[0].strip()
-                    true_player_name = parts[1].strip()
+                    rest = parts[1].strip()
+                    if "|EMAIL:" in rest:
+                        true_player_name, wallet_email = rest.split("|EMAIL:")
+                        true_player_name = true_player_name.strip()
+                        wallet_email = wallet_email.strip()
+                    else:
+                        true_player_name = rest
                 else:
                     true_player_id = clipboard_res
                     
+                if wallet_email:
+                    player_email = wallet_email
+
                 if true_player_id and true_player_id.isdigit():
-                    print(f"[PLAYBISON] Extracted true Player ID from wallet page: {true_player_id} (Name: {true_player_name})")
+                    print(f"[PLAYBISON] Extracted true Player ID from wallet page: {true_player_id} (Name: {true_player_name}, Email: {player_email})")
                 else:
                     print(f"[PLAYBISON] Warning: Could not extract true Player ID. Falling back to transaction ID.")
                     true_player_id = player_id
@@ -566,6 +693,7 @@ def main():
                             
                             analytics_url = "https://playbison-analytics.web.app/reports/violating-transactions"
                             print(f"[PLAYBISON] Opening Analytics Platform: {analytics_url}")
+                            analytics_opened = True
                             webbrowser.open_new_tab(analytics_url)
                             print("[PLAYBISON] Waiting 8 seconds for Analytics to load...")
                             time.sleep(8.0)
@@ -625,14 +753,7 @@ def main():
                             
                             if not analytics_dates_str or analytics_dates_str == "NO_DATES_FOUND" or analytics_dates_str.startswith("ERROR"):
                                 print(f"[PLAYBISON] Failed to extract dates from Analytics: {analytics_dates_str}")
-                                pyautogui.hotkey('ctrl', 'w') # Close Analytics
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w') # Close Wallet
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w') # Close Data Studio
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w') # Close Duplicates
-                                time.sleep(0.5)
+                                cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
                                 sys.exit(1)
                             
                             print("[PLAYBISON] Successfully extracted dates from Analytics.")
@@ -678,14 +799,7 @@ def main():
                             
                             if not parsed_dates:
                                 print("[PLAYBISON] Could not parse any valid dates.")
-                                pyautogui.hotkey('ctrl', 'w')
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w')
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w')
-                                time.sleep(0.5)
-                                pyautogui.hotkey('ctrl', 'w')
-                                time.sleep(0.5)
+                                cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
                                 sys.exit(1)
                                 
                             min_date = min(parsed_dates)
@@ -703,6 +817,7 @@ def main():
                             
                             print("[PLAYBISON] Closing Analytics tab to return to Playbison tab...")
                             pyautogui.hotkey('ctrl', 'w')   # close Analytics tab → Chrome auto-focuses prev tab
+                            analytics_opened = False
                             time.sleep(2.0)
                             
                             print("[PLAYBISON] Injecting macro to set Playbison Date filters...")
@@ -972,38 +1087,61 @@ def main():
                             print(f"[PLAYBISON] Last deposit via Credit Card ('{last_deposit_op}'). Flagging as 'Verify docs' — CC verification required.")
                             approval_status = "Verify docs"
                         
-                    w_value_display = str(w_value).strip()
-                    if w_value_display and t_curr and t_curr.strip().upper() not in w_value_display.upper():
-                        w_value_display = f"{w_value_display} {t_curr.strip().upper()}"
+                    # Convert withdrawal amount to PLN if not already PLN
+                    curr_upper = t_curr.strip().upper() if t_curr else "PLN"
+                    if curr_upper and curr_upper != "PLN":
+                        pln_amount, fx_note = convert_to_pln(
+                            str(w_value).strip(), curr_upper,
+                            pyautogui_ref=pyautogui,
+                            pyperclip_ref=pyperclip,
+                            time_ref=time,
+                            webbrowser_ref=webbrowser,
+                            load_macro_ref=load_macro
+                        )
+                        w_value_display = f"{pln_amount} PLN"
+                        if fx_note:
+                            print(f"[GOOGLE SHEETS] Amount converted: {fx_note}")
+                    else:
+                        w_value_display = str(w_value).strip()
+                        if w_value_display and "PLN" not in w_value_display.upper():
+                            w_value_display = f"{w_value_display} PLN"
                         
-                    row_data = f"{sheet_date}\t{extracted_id}\t{fn} {ln}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
+                    name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else f"{fn} {ln}".strip()
+                    row_data = f"{sheet_date}\t{extracted_id}\t{name_to_use}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"
                     print(f"[GOOGLE SHEETS] Opening {target_url} in a new tab...")
                     
                     # Open Google Sheets
+                    sheets_opened = True
                     webbrowser.open_new_tab(target_url)
                     
-                    print("[GOOGLE SHEETS] Waiting 7 seconds for Google Sheets to fully load...")
-                    time.sleep(7.0)
+                    print("[GOOGLE SHEETS] Waiting 9 seconds for Google Sheets to fully load...")
+                    time.sleep(9.0)
                     
                     print("[GOOGLE SHEETS] Navigating to the next empty row...")
-                    # Go to the bottom right of the sheet
+                    # Press Ctrl+End twice — first press may land on last visible cell,
+                    # second press confirms the true last used cell after full render.
                     pyautogui.hotkey('ctrl', 'end')
-                    time.sleep(1.0)
+                    time.sleep(1.2)
+                    pyautogui.hotkey('ctrl', 'end')
+                    time.sleep(1.2)
                     
-                    # Go to the first column (Column A) of the bottom row
+                    # Now go to Column A of this last row
                     pyautogui.press('home')
-                    time.sleep(1.0)
+                    time.sleep(0.8)
                     
-                    # Go UP to the last filled row in Column A
-                    pyautogui.hotkey('ctrl', 'up')
-                    time.sleep(1.0)
+                    # Navigate: go to A1 first, then jump DOWN to the last filled cell
+                    # Ctrl+Home → A1, Ctrl+Down → last filled cell in column A
+                    pyautogui.hotkey('ctrl', 'home')
+                    time.sleep(0.5)
+                    pyautogui.hotkey('ctrl', 'down')
+                    time.sleep(0.8)
                     
-                    # Go DOWN one cell to the next empty row
+                    # Go one row down to the first empty row
                     pyautogui.press('down')
-                    time.sleep(1.0)
+                    time.sleep(0.5)
                     
                     print("[GOOGLE SHEETS] Pasting data into the new row...")
                     pyautogui.hotkey('ctrl', 'v')
@@ -1016,16 +1154,8 @@ def main():
                     
                     print("[GOOGLE SHEETS] Data successfully logged!")
                     
-                    # Clean up tabs
-                    print("[DATASTUDIO] Closing tabs to return to Playbison...")
-                    pyautogui.hotkey('ctrl', 'w') # Close Sheets
-                    time.sleep(0.5)
-                    pyautogui.hotkey('ctrl', 'w') # Close Wallet
-                    time.sleep(0.5)
-                    pyautogui.hotkey('ctrl', 'w') # Close Data Studio
-                    time.sleep(0.5)
-                    pyautogui.hotkey('ctrl', 'w') # Close Duplicates
-                    time.sleep(0.5)
+                    # Clean up tabs safely
+                    cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
                     
                     print("[DATASTUDIO] Done. Ready for next loop.")
                 else:
