@@ -13,11 +13,10 @@ from macro_loader import load_macro
 # Cache live exchange rates per session to avoid repeated API calls
 _fx_rate_cache = {}
 
-def convert_to_pln(amount_str, currency, pyautogui_ref=None, pyperclip_ref=None, time_ref=None, webbrowser_ref=None, load_macro_ref=None):
-    """Convert an amount in a given currency to PLN.
-    Primary: opens a Google search tab in Chrome and scrapes the real-time result.
-    Fallback: Frankfurter ECB API.
+def convert_to_pln(amount_str, currency, **kwargs):
+    """Convert an amount in a given currency to PLN using live exchange rates.
     Returns a tuple: (pln_amount_str, note_str)
+    e.g. ('476.00', '40000.00 HUF → 476.00 PLN')
     """
     currency = (currency or "PLN").strip().upper()
     if currency == "PLN":
@@ -28,67 +27,28 @@ def convert_to_pln(amount_str, currency, pyautogui_ref=None, pyperclip_ref=None,
     except ValueError:
         return amount_str, ""
 
-    # --- Browser tab method (primary) ---
-    if pyautogui_ref and pyperclip_ref and time_ref and webbrowser_ref and load_macro_ref:
-        try:
-            search_url = f"https://www.google.com/search?q={amount_str}+{currency}+to+PLN&hl=en"
-            print(f"[FX] Opening Google conversion tab: {amount_str} {currency} to PLN...")
-            webbrowser_ref.open_new_tab(search_url)
-            time_ref.sleep(4.0)
-
-            # Inject the scraper macro
-            js_fx = load_macro_ref("gs_get_currency.js")
-            pyperclip_ref.copy("FX_WAITING")
-            pyautogui_ref.hotkey('ctrl', 'l')
-            time_ref.sleep(0.3)
-            pyautogui_ref.write('javascript:')
-            time_ref.sleep(0.2)
-            pyautogui_ref.hotkey('ctrl', 'v')
-            time_ref.sleep(0.3)
-            pyautogui_ref.press('enter')
-
-            # Wait for the macro to copy the result
-            time_ref.sleep(2.0)
-            clip = pyperclip_ref.paste().strip()
-
-            # Close the Google tab
-            pyautogui_ref.hotkey('ctrl', 'w')
-            time_ref.sleep(0.5)
-
-            if clip.startswith("FX_RESULT:") and not clip.endswith("FAILED"):
-                result_str = clip.replace("FX_RESULT:", "").strip()
-                pln_amount = round(float(result_str), 2)
-                note = f"{amount_str} {currency} = {pln_amount:.2f} PLN (Google live rate)"
-                print(f"[FX] {note}")
-                return f"{pln_amount:.2f}", note
-            else:
-                print(f"[FX] Google scrape returned: {clip!r}. Trying API fallback...")
-        except Exception as e:
-            print(f"[FX] Browser conversion error: {e}. Trying API fallback...")
-
-    # --- API fallback (Frankfurter ECB) ---
     global _fx_rate_cache
     if currency not in _fx_rate_cache:
         try:
-            url = f"https://api.frankfurter.app/latest?from={currency}&to=PLN"
+            url = f"https://open.er-api.com/v6/latest/{currency}"
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
                 rate_to_pln = data.get("rates", {}).get("PLN")
                 if rate_to_pln:
                     _fx_rate_cache[currency] = float(rate_to_pln)
-                    print(f"[FX] ECB API rate: 1 {currency} = {rate_to_pln} PLN")
+                    print(f"[FX] Live rate: 1 {currency} = {rate_to_pln} PLN")
                 else:
                     print(f"[FX] WARNING: PLN rate not found for {currency}. Keeping original.")
                     return f"{amount_str} {currency}", ""
         except Exception as e:
-            print(f"[FX] WARNING: API also failed for {currency}: {e}. Keeping original.")
+            print(f"[FX] WARNING: Rate fetch failed for {currency}: {e}. Keeping original.")
             return f"{amount_str} {currency}", ""
 
     rate = _fx_rate_cache[currency]
     pln_amount = round(amount * rate, 2)
-    note = f"{amount_str} {currency} = {pln_amount:.2f} PLN (ECB API fallback)"
-    print(f"[FX] {note}")
+    note = f"{amount_str} {currency} -> {pln_amount:.2f} PLN"
+    print(f"[FX] Converted: {note}")
     return f"{pln_amount:.2f}", note
 
 
@@ -116,6 +76,8 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
     time.sleep(0.5)
     pyautogui.hotkey('ctrl', '1')
     time.sleep(0.5)
+    pyautogui.press('escape')
+    time.sleep(0.3)
 
 
 def main():
@@ -143,11 +105,16 @@ def main():
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
         time.sleep(1)
 
+    # Disable pyautogui failsafe to prevent crashes during corner mouse movements
+    pyautogui.FAILSAFE = False
+
     # Read saved user ID, email & brand if available
     import json, os, re
     player_id = ""
     player_email = ""
     player_brand = ""
+    player_name = ""
+    saved_wid = ""
     w_value = ""
     t_curr = "PLN"
     id_date = ""
@@ -158,6 +125,8 @@ def main():
                 player_email = data.get("email", "")
                 player_id = data.get("id", "")
                 player_brand = data.get("brand", "")
+                player_name = data.get("name", "")
+                saved_wid = data.get("wallet_id", "").strip()
                 w_value = data.get("w_value", "")
                 t_curr = data.get("t_curr", "PLN")
                 id_date = data.get("id_date", "")
@@ -179,14 +148,14 @@ def main():
     time.sleep(0.3)
     pyautogui.press('enter')
     
-    print("[PLAYBISON] Waiting 2 seconds for Payment Details modal to open...")
-    time.sleep(2.0)
+    print("[PLAYBISON] Waiting 3.5 seconds for Payment Details modal to open...")
+    time.sleep(3.5)
     
     # Step B: Extract maskedAccount + wallet_id from open modal
     # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
     # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
     # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
-    js_extract_macro = load_macro("ds_extract_modal.js")
+    js_extract_macro = load_macro("ds_extract_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email, PLAYER_NAME=player_name)
     
     pyperclip.copy("WAITING_FOR_PROMPT")
     pyperclip.copy(js_extract_macro)
@@ -252,6 +221,35 @@ def main():
                     ln, city = rest.split("|CITY:")
                     ln = ln.strip()
                     city = city.strip()
+
+    # Priority 1: If table scan already grabbed the full hex wallet_id, use it directly!
+    if saved_wid and len(saved_wid) > 15 and "..." not in saved_wid and not saved_wid.startswith("NOT_FOUND"):
+        wallet_id = saved_wid
+        print(f"[PLAYBISON] Using exact wallet_id from table scan: {wallet_id}")
+    elif saved_wid and "..." in saved_wid:
+        clean_prefix = saved_wid.replace("...", "").strip()
+        if clean_prefix and wallet_id and not wallet_id.startswith(clean_prefix):
+            print(f"[PLAYBISON] WARNING: Modal wallet_id ('{wallet_id}') mismatches scanned prefix ('{clean_prefix}'). Discarding stale modal data!")
+            wallet_id = clean_prefix
+            fn = ""
+            ln = ""
+            city = ""
+    elif not wallet_id and saved_wid:
+        wallet_id = saved_wid
+
+    # Fallback to player_name from scan if fn/ln missing or mismatched
+    if (not fn or not ln) and player_name and " " in player_name:
+        p_parts = player_name.strip().split(None, 1)
+        fn = p_parts[0]
+        ln = p_parts[1] if len(p_parts) > 1 else ""
+        print(f"[PLAYBISON] Using scanned player name: {fn} {ln}")
+    elif player_name and (fn or ln):
+        modal_name = f"{fn} {ln}".strip().lower()
+        if player_name.lower().split()[-1] not in modal_name:
+            print(f"[PLAYBISON] WARNING: Modal name ('{fn} {ln}') does not match scanned name ('{player_name}'). Using scanned name!")
+            p_parts = player_name.strip().split(None, 1)
+            fn = p_parts[0]
+            ln = p_parts[1] if len(p_parts) > 1 else ""
                 
     approval_status = "PENDING"
     if fn and ln:
@@ -466,7 +464,9 @@ def main():
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
-            if not wallet_id and player_id:
+            if (not wallet_id or wallet_id == "NOTFOUND" or "..." in wallet_id) and saved_wid and len(saved_wid) > 10 and "..." not in saved_wid:
+                wallet_id = saved_wid
+            elif not wallet_id and player_id:
                 wallet_id = player_id
 
             if wallet_id:
@@ -480,7 +480,7 @@ def main():
                 
                 # Extract the correct Player ID and Name from the wallet page
                 js_extract_player_id = load_macro("ds_extract_player_id.js")
-                pyperclip.copy('')
+                pyperclip.copy('WAITING_FOR_ID')
                 pyperclip.copy(js_extract_player_id)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
@@ -490,31 +490,39 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 
-                time.sleep(1.0)
+                time.sleep(1.2)
                 clipboard_res = pyperclip.paste().strip()
                 true_player_name = ""
-                wallet_email = ""
-                if "|NAME:" in clipboard_res:
-                    parts = clipboard_res.split("|NAME:")
-                    true_player_id = parts[0].strip()
-                    rest = parts[1].strip()
-                    if "|EMAIL:" in rest:
-                        true_player_name, wallet_email = rest.split("|EMAIL:")
-                        true_player_name = true_player_name.strip()
-                        wallet_email = wallet_email.strip()
-                    else:
-                        true_player_name = rest
-                else:
-                    true_player_id = clipboard_res
+                # Verify clipboard is NOT the injected JS code itself or waiting flag
+                if (clipboard_res and 
+                    clipboard_res != "WAITING_FOR_ID" and 
+                    not clipboard_res.startswith("(function") and 
+                    not "document.createElement" in clipboard_res):
                     
-                if wallet_email:
-                    player_email = wallet_email
+                    if "|NAME:" in clipboard_res:
+                        parts = clipboard_res.split("|NAME:")
+                        cand_id = parts[0].strip()
+                        if cand_id.isdigit():
+                            true_player_id = cand_id
+                        true_player_name = parts[1].strip()
+                    elif clipboard_res.isdigit():
+                        true_player_id = clipboard_res
 
                 if true_player_id and true_player_id.isdigit():
-                    print(f"[PLAYBISON] Extracted true Player ID from wallet page: {true_player_id} (Name: {true_player_name}, Email: {player_email})")
+                    # Cross-check extracted name against expected scanned player_name
+                    if player_name and true_player_name:
+                        scan_last = player_name.strip().split()[-1].lower()
+                        wallet_last = true_player_name.strip().split()[-1].lower()
+                        if scan_last not in true_player_name.lower() and wallet_last not in player_name.lower():
+                            print(f"[PLAYBISON] WARNING: Wallet page extracted name ('{true_player_name}') does not match expected player ('{player_name}'). Keeping scanned player name!")
+                            true_player_name = player_name
+                            true_player_id = player_id
+                    print(f"[PLAYBISON] Extracted true Player ID from wallet page: {true_player_id} (Name: {true_player_name})")
                 else:
                     print(f"[PLAYBISON] Warning: Could not extract true Player ID. Falling back to transaction ID.")
                     true_player_id = player_id
+                    if not true_player_name and player_name:
+                        true_player_name = player_name
 
                 
                 # Step 1: Open Notes Tab
@@ -1022,7 +1030,7 @@ def main():
                     print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
                     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     sheet_date = id_date or now_str
-                    print(f"[GOOGLE SHEETS] Date & Time (ID date): {sheet_date}")
+                    print(f"[GOOGLE SHEETS] Date & Time: {sheet_date} | Withdrawal ID: {player_id} | Player ID: {extracted_id}")
                      
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
@@ -1089,25 +1097,35 @@ def main():
                         
                     # Convert withdrawal amount to PLN if not already PLN
                     curr_upper = t_curr.strip().upper() if t_curr else "PLN"
+                    val_in_pln = 0.0
                     if curr_upper and curr_upper != "PLN":
-                        pln_amount, fx_note = convert_to_pln(
-                            str(w_value).strip(), curr_upper,
-                            pyautogui_ref=pyautogui,
-                            pyperclip_ref=pyperclip,
-                            time_ref=time,
-                            webbrowser_ref=webbrowser,
-                            load_macro_ref=load_macro
-                        )
+                        pln_amount, fx_note = convert_to_pln(str(w_value).strip(), curr_upper)
                         w_value_display = f"{pln_amount} PLN"
+                        try:
+                            val_in_pln = float(pln_amount)
+                        except ValueError:
+                            pass
                         if fx_note:
                             print(f"[GOOGLE SHEETS] Amount converted: {fx_note}")
                     else:
                         w_value_display = str(w_value).strip()
+                        try:
+                            clean_num = re.sub(r'[^0-9.]', '', w_value_display.replace(',', '.'))
+                            val_in_pln = float(clean_num) if clean_num else 0.0
+                        except ValueError:
+                            pass
                         if w_value_display and "PLN" not in w_value_display.upper():
                             w_value_display = f"{w_value_display} PLN"
+                    
+                    # If withdrawal amount is over 2000 PLN, set approval status to "Req IBAN"
+                    if val_in_pln > 2000.0:
+                        if approval_status == "Approve":
+                            print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN. Setting approval status to 'Req IBAN'.")
+                            approval_status = "Req IBAN"
                         
-                    name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else f"{fn} {ln}".strip()
-                    row_data = f"{sheet_date}\t{extracted_id}\t{name_to_use}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
+                    name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
+                    withdrawal_id = player_id
+                    row_data = f"{sheet_date}\t{withdrawal_id}\t{extracted_id}\t{name_to_use}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"

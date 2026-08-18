@@ -34,6 +34,12 @@
   function checkPage() {
     for (let doc of getFrames()) {
       if (!doc || !doc.body) continue;
+      let closeBtns = doc.querySelectorAll('.modal .close, .x-tool-close, button[aria-label="Close"], button[title="Close"], .close, [data-dismiss="modal"], a.close, [class*="modal-close"], [class*="dialog-close"]');
+      for (let btn of closeBtns) {
+        if (btn.offsetWidth > 0 || btn.offsetHeight > 0) {
+          try { btn.click(); } catch (e) {}
+        }
+      }
       let ths = Array.from(doc.querySelectorAll('th'));
       let roleTh = ths.find(th => th.textContent.trim().toLowerCase() === 'roles');
       let loginTh = ths.find(th => th.textContent.trim().toLowerCase() === 'login');
@@ -41,8 +47,11 @@
 
       let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
       let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value' || th.textContent.trim().toLowerCase() === 'value w currency' || th.textContent.trim().toLowerCase() === 't value');
-      let tCurrTh = ths.find(th => th.textContent.trim().toLowerCase() === 't currency');
+      let tCurrTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w currency' || th.textContent.trim().toLowerCase() === 't currency');
       let dateTh = ths.find(th => th.textContent.trim().toLowerCase() === 'date');
+      let walletIdTh = ths.find(th => th.textContent.trim().toLowerCase() === 'wallet id' || th.textContent.trim().toLowerCase() === 'wallet_id');
+      let opTh = ths.find(th => th.textContent.trim().toLowerCase() === 'operator' || th.textContent.trim().toLowerCase() === 'operator name');
+      let nameTh = ths.find(th => th.textContent.trim().toLowerCase() === 'name');
 
       if (roleTh) {
         let roleIdx = ths.indexOf(roleTh);
@@ -52,6 +61,10 @@
         let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
         let tCurrIdx = tCurrTh ? ths.indexOf(tCurrTh) : -1;
         let dateIdx = dateTh ? ths.indexOf(dateTh) : -1;
+        let walletIdIdx = walletIdTh ? ths.indexOf(walletIdTh) : -1;
+        let opIdx = opTh ? ths.indexOf(opTh) : -1;
+        let nameIdx = nameTh ? ths.indexOf(nameTh) : -1;
+
         let trs = Array.from(doc.querySelectorAll('tbody tr'));
         if (trs.length === 0) continue;
         
@@ -64,6 +77,9 @@
         let foundWValue = "";
         let foundTCurr = "";
         let foundDate = "";
+        let foundWalletId = "";
+        let foundOperator = "";
+        let foundName = "";
 
         window._processedBisonIds = window._processedBisonIds || new Set();
 
@@ -117,13 +133,38 @@
                 foundDate = foundDate.replace(/[+-]\d{2}:\d{2}$/, '').trim();
               }
             }
+            if (walletIdIdx !== -1) {
+              let walletIdTd = tr.children[walletIdIdx];
+              if (walletIdTd) {
+                let a = walletIdTd.querySelector('a');
+                let href = a ? (a.getAttribute('href') || a.href || '') : '';
+                let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
+                let qtip = walletIdTd.getAttribute('data-qtip') || walletIdTd.getAttribute('title') || (a ? (a.getAttribute('data-qtip') || a.getAttribute('title')) : '');
+                if (hrefMatch && hrefMatch[1]) {
+                  foundWalletId = hrefMatch[1].trim();
+                } else if (qtip && qtip.match(/^[a-f0-9]{15,}$/i)) {
+                  foundWalletId = qtip.trim();
+                } else {
+                  let fullVal = walletIdTd.getAttribute('title') || (a ? a.getAttribute('title') : '') || walletIdTd.getAttribute('data-original-title') || walletIdTd.getAttribute('data-value');
+                  foundWalletId = (fullVal && fullVal.length > 5) ? fullVal.trim() : walletIdTd.textContent.trim();
+                }
+              }
+            }
+            if (opIdx !== -1) {
+              let opTd = tr.children[opIdx];
+              if (opTd) foundOperator = opTd.textContent.trim();
+            }
+            if (nameIdx !== -1) {
+              let nameTd = tr.children[nameIdx];
+              if (nameTd) foundName = nameTd.textContent.trim();
+            }
             break;
           }
         }
 
         if (foundTarget) {
           if (foundEmail) {
-            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr|IDDate):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate);
+            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr|IDDate|WalletId|Operator|Name):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate + "|" + foundWalletId + "|" + foundOperator + "|" + foundName);
           } else {
             alert("Found a non-VIP Role, but couldn't find the email in the login column.");
           }

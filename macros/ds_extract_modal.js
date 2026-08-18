@@ -1,5 +1,13 @@
 (function () {
   try {
+    let targetId = '###PLAYER_ID###';
+    let targetEmail = '###PLAYER_EMAIL###';
+    let targetName = '###PLAYER_NAME###';
+
+    if (targetId.startsWith('###')) targetId = '';
+    if (targetEmail.startsWith('###')) targetEmail = '';
+    if (targetName.startsWith('###')) targetName = '';
+
     function getFrames() {
       let docs = [document];
       let frames = document.querySelectorAll('iframe, frame');
@@ -20,7 +28,53 @@
 
     for (let doc of getFrames()) {
       if (!doc || !doc.body) continue;
-      let all = Array.from(doc.querySelectorAll('*'));
+
+      // Find modal / dialog containers
+      let allContainers = Array.from(doc.querySelectorAll('.x-window, .modal, [role="dialog"], .dialog, .popup, [class*="window"], [class*="modal"]'));
+      
+      // Filter for visible containers
+      let visibleContainers = allContainers.filter(c => {
+        let style = window.getComputedStyle(c);
+        return style.display !== 'none' && style.visibility !== 'hidden' && (c.offsetWidth > 0 || c.offsetHeight > 0);
+      });
+
+      let activeContainer = null;
+
+      // 1. Try to find container matching targetId
+      if (targetId && visibleContainers.length > 0) {
+        activeContainer = visibleContainers.slice().reverse().find(c => {
+          let txt = (c.innerText || c.textContent || '');
+          return txt.includes(targetId);
+        });
+      }
+
+      // 2. Try to find container matching targetEmail or targetName
+      if (!activeContainer && (targetEmail || targetName) && visibleContainers.length > 0) {
+        activeContainer = visibleContainers.slice().reverse().find(c => {
+          let txt = (c.innerText || c.textContent || '').toLowerCase();
+          return (targetEmail && txt.includes(targetEmail.toLowerCase())) ||
+                 (targetName && txt.includes(targetName.toLowerCase()));
+        });
+      }
+
+      // 3. If targetId was specified but container doesn't match and has a different numeric ID, do NOT use stale container
+      if (!activeContainer && visibleContainers.length > 0) {
+        let candidate = visibleContainers[visibleContainers.length - 1];
+        let cTxt = candidate.innerText || candidate.textContent || '';
+        // If candidate contains an obvious different transaction ID, reject it
+        let hasWrongId = targetId && /\b\d{7}\b/.test(cTxt) && !cTxt.includes(targetId);
+        if (!hasWrongId) {
+          activeContainer = candidate;
+        }
+      }
+
+      if (!activeContainer) {
+        // If no valid modal container found yet, report NOTFOUND so python can retry/fallback
+        continue;
+      }
+
+      let root = activeContainer;
+      let all = Array.from(root.querySelectorAll('*'));
 
       function getVal(lbl) {
         let l = all.find(e => e.children.length === 0 && e.textContent.trim().toLowerCase() === lbl.toLowerCase());
@@ -32,13 +86,21 @@
         return '';
       }
 
-      let op = getVal('Operator').toUpperCase();
-      let fn = getVal('first name');
-      let ln = getVal('last name');
-      let wid = getVal('wallet_id');
+      let op = (getVal('Operator') || getVal('Operator Name')).toUpperCase();
+      let fn = getVal('first name') || getVal('Firstname') || getVal('Name');
+      let ln = getVal('last name') || getVal('Lastname') || getVal('Surname');
+      let wid = getVal('wallet_id') || getVal('wallet id') || getVal('Wallet ID') || getVal('Wallet');
+      let city = getVal('city') || getVal('City');
+
+      // If wid is empty in labels, check input fields/cells inside active modal container
+      if (!wid) {
+        let allInputs = Array.from(root.querySelectorAll('input, td, span, a'));
+        let widEl = allInputs.find(e => ((e.value || e.textContent || '').trim().match(/^[a-f0-9]{20,}$/i)));
+        if (widEl) wid = (widEl.value || widEl.textContent || '').trim();
+      }
 
       if (op.includes('COINSPAID')) {
-        prompt('RESULT:', 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
+        prompt('RESULT:', 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
         return;
       }
 
@@ -63,36 +125,34 @@
         if (JSONEl) reqStr = JSONEl.textContent.trim();
       }
 
-      if (reqStr) {
-        let match = reqStr.match(/["']?maskedAccount["']?\s*[:=]\s*["']([^"']+)["']/i);
-        if (!match) match = reqStr.match(/["']?maskedAccount["']?\s*[:=]\s*["']?([^,}\r\n]+)/i);
-        let acc = match ? match[1].replace(/["']/g, '').trim() : '';
+      let match = reqStr.match(/["']?maskedAccount["']?\s*[:=]\s*["']([^"']+)["']/i);
+      if (!match) match = reqStr.match(/["']?maskedAccount["']?\s*[:=]\s*["']?([^,}\r\n]+)/i);
+      let acc = match ? match[1].replace(/["']/g, '').trim() : '';
 
-        if (op.includes('PAYSAFECARD') || op.includes('SKRILL')) {
+      if (op.includes('PAYSAFECARD') || op.includes('SKRILL')) {
+        if (acc) {
+          prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
+        } else {
+          prompt('MISMATCH:', 'NAMEFAIL:maskedAccount not found|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
+        }
+        return;
+      } else {
+        let fnNorm = normStr(fn);
+        let lnNorm = normStr(ln);
+        let reqNorm = normStr(reqStr);
+        let fnMatch = !fnNorm || reqNorm.includes(fnNorm);
+        let lnMatch = !lnNorm || reqNorm.includes(lnNorm);
+
+        if (fnMatch && lnMatch) {
           if (acc) {
-            prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
+            prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
           } else {
-            prompt('MISMATCH:', 'NAMEFAIL:maskedAccount not found|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
+            prompt('RESULT:', (reqStr || 'OK') + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
           }
           return;
         } else {
-          let fnNorm = normStr(fn);
-          let lnNorm = normStr(ln);
-          let reqNorm = normStr(reqStr);
-          let fnMatch = !fnNorm || reqNorm.includes(fnNorm);
-          let lnMatch = !lnNorm || reqNorm.includes(lnNorm);
-
-          if (fnMatch && lnMatch) {
-            if (acc) {
-              prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
-            } else {
-              prompt('RESULT:', reqStr + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
-            }
-            return;
-          } else {
-            prompt('MISMATCH:', 'NAMEFAIL:' + fn + ' ' + ln + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + getVal('city') + '|OP:' + op);
-            return;
-          }
+          prompt('MISMATCH:', 'NAMEFAIL:' + fn + ' ' + ln + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
+          return;
         }
       }
     }
