@@ -454,11 +454,9 @@ def main():
 
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
-        if True: 
+        if True:
             if ratio_val >= 25.0:
-                print(f"[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%)! Closing tabs and terminating flow early.")
-                cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
-                sys.exit(0)
+                print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%)! Proceeding with flow (Approval status: 'W/d ratio > 25%').")
             else:
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)! Proceeding to Playbison for manual cancellation check!")
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
@@ -1059,6 +1057,9 @@ def main():
                     
                     approval_status = "Approve"
                     
+                    if ratio_val is not None and ratio_val >= 25.0:
+                        approval_status = "W/d ratio >= 25%"
+                    
                     if dup_res == "YES":
                         approval_status = "Review (Duplicates)"
                     elif mistral_failed:
@@ -1138,28 +1139,30 @@ def main():
                     print("[GOOGLE SHEETS] Waiting 9 seconds for Google Sheets to fully load...")
                     time.sleep(9.0)
                     
-                    print("[GOOGLE SHEETS] Navigating to the next empty row...")
-                    # Press Ctrl+End twice — first press may land on last visible cell,
-                    # second press confirms the true last used cell after full render.
+                    print("[GOOGLE SHEETS] Navigating to the next empty row from bottom...")
+                    # 1. Ctrl+End lands on the bottom-right corner of the used data range
                     pyautogui.hotkey('ctrl', 'end')
-                    time.sleep(1.2)
-                    pyautogui.hotkey('ctrl', 'end')
-                    time.sleep(1.2)
+                    time.sleep(0.8)
                     
-                    # Now go to Column A of this last row
+                    # 2. Move to Column A of this bottom row
                     pyautogui.press('home')
-                    time.sleep(0.8)
+                    time.sleep(0.4)
                     
-                    # Navigate: go to A1 first, then jump DOWN to the last filled cell
-                    # Ctrl+Home → A1, Ctrl+Down → last filled cell in column A
-                    pyautogui.hotkey('ctrl', 'home')
-                    time.sleep(0.5)
-                    pyautogui.hotkey('ctrl', 'down')
-                    time.sleep(0.8)
+                    # 3. Ctrl+Up jumps directly to the last cell that has data in Column A
+                    pyautogui.hotkey('ctrl', 'up')
+                    time.sleep(0.4)
                     
-                    # Go one row down to the first empty row
+                    # 4. Step down exactly 1 row to the next empty row
                     pyautogui.press('down')
-                    time.sleep(0.5)
+                    time.sleep(0.4)
+                    
+                    # Ensure in Column A of the empty row
+                    pyautogui.press('home')
+                    time.sleep(0.2)
+                    
+                    # Recopy row_data to clipboard to ensure fresh paste
+                    pyperclip.copy(row_data)
+                    time.sleep(0.2)
                     
                     print("[GOOGLE SHEETS] Pasting data into the new row...")
                     pyautogui.hotkey('ctrl', 'v')

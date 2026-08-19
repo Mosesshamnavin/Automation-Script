@@ -31,6 +31,26 @@
     return null;
   }
 
+  function isAfterPreviousDay1330(dateStr) {
+    if (!dateStr) return true;
+    let m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+    if (!m) return true;
+
+    let y = parseInt(m[1], 10);
+    let mon = parseInt(m[2], 10) - 1;
+    let d = parseInt(m[3], 10);
+    let h = parseInt(m[4], 10);
+    let min = parseInt(m[5], 10);
+
+    let rowDate = new Date(y, mon, d, h, min, 0);
+
+    let now = new Date();
+    // Yesterday at 13:30:00
+    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 13, 30, 0);
+
+    return rowDate >= cutoff;
+  }
+
   function checkPage() {
     for (let doc of getFrames()) {
       if (!doc || !doc.body) continue;
@@ -92,6 +112,21 @@
           
           // Skip if we already processed this ID in a previous loop
           if (idVal && window._processedBisonIds.has(idVal)) continue;
+
+          let dateVal = "";
+          if (dateIdx !== -1) {
+            let dateTd = tr.children[dateIdx];
+            if (dateTd) {
+              dateVal = (dateTd.textContent || '').replace(/\s+/g, ' ').trim();
+              dateVal = dateVal.replace(/[+-]\d{2}:\d{2}$/, '').trim();
+            }
+          }
+
+          // Skip records that are older than previous day 13:30
+          if (dateVal && !isAfterPreviousDay1330(dateVal)) {
+            if (idVal) window._processedBisonIds.add(idVal);
+            continue;
+          }
           
           let emailVal = "";
           if (loginIdx !== -1) {
@@ -106,6 +141,7 @@
             if (idVal) window._processedBisonIds.add(idVal);
             td.style.border = "4px solid red";
             tr.style.backgroundColor = "#ffcccc";
+            foundDate = dateVal;
             if (loginIdx !== -1) {
               let loginTd = tr.children[loginIdx];
               if (loginTd) foundEmail = loginTd.textContent.trim();
@@ -126,13 +162,7 @@
               let tCurrTd = tr.children[tCurrIdx];
               if (tCurrTd) foundTCurr = tCurrTd.textContent.trim().toUpperCase();
             }
-            if (dateIdx !== -1) {
-              let dateTd = tr.children[dateIdx];
-              if (dateTd) {
-                foundDate = (dateTd.textContent || '').replace(/\s+/g, ' ').trim();
-                foundDate = foundDate.replace(/[+-]\d{2}:\d{2}$/, '').trim();
-              }
-            }
+
             if (walletIdIdx !== -1) {
               let walletIdTd = tr.children[walletIdIdx];
               if (walletIdTd) {
