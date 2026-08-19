@@ -52,6 +52,14 @@
   }
 
   function checkPage() {
+    let injected = /*###COMPLETED_IDS###*/ [];
+    window._processedBisonIds = window._processedBisonIds || new Set();
+    if (Array.isArray(injected)) {
+      for (let id of injected) {
+        if (id) window._processedBisonIds.add(String(id).trim());
+      }
+    }
+
     for (let doc of getFrames()) {
       if (!doc || !doc.body) continue;
       let closeBtns = doc.querySelectorAll('.modal .close, .x-tool-close, button[aria-label="Close"], button[title="Close"], .close, [data-dismiss="modal"], a.close, [class*="modal-close"], [class*="dialog-close"]');
@@ -101,8 +109,6 @@
         let foundOperator = "";
         let foundName = "";
 
-        window._processedBisonIds = window._processedBisonIds || new Set();
-
         for (let tr of trs) {
           let idVal = "";
           if (idIdx !== -1) {
@@ -110,7 +116,7 @@
             if (idTd) idVal = idTd.textContent.trim();
           }
           
-          // Skip if we already processed this ID in a previous loop
+          // Skip if we already completed this ID
           if (idVal && window._processedBisonIds.has(idVal)) continue;
 
           let dateVal = "";
@@ -124,7 +130,6 @@
 
           // Skip records that are older than previous day 13:30
           if (dateVal && !isAfterPreviousDay1330(dateVal)) {
-            if (idVal) window._processedBisonIds.add(idVal);
             continue;
           }
           
@@ -138,7 +143,6 @@
           let roleVal = td ? td.textContent.trim() : "";
           if (td && !roleVal.toUpperCase().includes('VIP')) {
             foundTarget = true;
-            if (idVal) window._processedBisonIds.add(idVal);
             td.style.border = "4px solid red";
             tr.style.backgroundColor = "#ffcccc";
             foundDate = dateVal;

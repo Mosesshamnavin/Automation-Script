@@ -87,8 +87,32 @@ def main():
     pyautogui.hotkey('ctrl', '1')
     time.sleep(0.5)
     
+    import json
+    import os
+    import datetime
+    
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    completed_ids = []
+    if os.path.exists("completed_ids.json"):
+        try:
+            with open("completed_ids.json", "r") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                if data.get("date") == today_str:
+                    completed_ids = data.get("ids", [])
+                else:
+                    print(f"[STATE] New day detected ({today_str}). Resetting completed_ids.json...")
+                    with open("completed_ids.json", "w") as f:
+                        json.dump({"date": today_str, "ids": []}, f, indent=2)
+                    completed_ids = []
+            elif isinstance(data, list):
+                completed_ids = data
+        except Exception:
+            completed_ids = []
+            
     # Macro 4: Scan table for non-VIP roles, extract email and ID, and loop via Previous button
     js_macro_4 = load_macro("playbison_scan_nonvip.js")
+    js_macro_4 = js_macro_4.replace("/*###COMPLETED_IDS###*/ []", json.dumps(completed_ids))
     pyperclip.copy(js_macro_4)
     
     pyautogui.hotkey('ctrl', 'l')

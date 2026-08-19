@@ -951,12 +951,10 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Switched to Payment Log, selected Pending/Completed, and clicked Search.")
                 
-                print("[PLAYBISON] Waiting 6 seconds for search results to load...")
-                time.sleep(6.0)
+                print("[PLAYBISON] Waiting 3 seconds for search results to load...")
+                time.sleep(3.0)
                 
                 # Extract the last deposit ID from the Payment Log
-                # The JS macro uses setInterval polling up to 10s for AJAX table load.
-                # Python must wait at least 11s to ensure polling has finished.
                 js_get_last_deposit = load_macro("ds_get_last_deposit.js")
                 pyperclip.copy('WAITING')
                 pyperclip.copy(js_get_last_deposit)
@@ -968,8 +966,7 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 
-                # Wait 11s for JS polling (20 × 500ms = 10s max) to complete
-                time.sleep(11.0)
+                time.sleep(1.5)
                 payment_log_val = pyperclip.paste().strip()
                 last_deposit_op = "NOT_FOUND"
                 withdrawal_op = playbison_op
@@ -1028,7 +1025,8 @@ def main():
                     print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
                     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     sheet_date = id_date or now_str
-                    print(f"[GOOGLE SHEETS] Date & Time: {sheet_date} | Withdrawal ID: {player_id} | Player ID: {extracted_id}")
+                    wid_log = wallet_id if (wallet_id and wallet_id != "NOTFOUND" and "..." not in wallet_id) else (saved_wid or "")
+                    print(f"[GOOGLE SHEETS] Date & Time: {sheet_date} | Withdrawal ID: {player_id} | Player ID: {extracted_id} | Wallet ID: {wid_log}")
                      
                     # Ensure ratio_val is formatted, or fallback to raw
                     ratio_str = f"{ratio_val}%" if ratio_val is not None else ratio_raw
@@ -1058,7 +1056,7 @@ def main():
                     approval_status = "Approve"
                     
                     if ratio_val is not None and ratio_val >= 25.0:
-                        approval_status = "W/d ratio >= 25%"
+                        approval_status = "W/D Ratio >= 25%"
                     
                     if dup_res == "YES":
                         approval_status = "Review (Duplicates)"
@@ -1126,7 +1124,8 @@ def main():
                         
                     name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
                     withdrawal_id = player_id
-                    row_data = f"{sheet_date}\t{withdrawal_id}\t{extracted_id}\t{name_to_use}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
+                    final_wid = wallet_id if (wallet_id and wallet_id != "NOTFOUND" and "..." not in wallet_id) else (saved_wid or "")
+                    row_data = f"{sheet_date}\t{withdrawal_id}\t{extracted_id}\t{name_to_use}\t{final_wid}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     
                     target_url = "https://docs.google.com/spreadsheets/d/1yIwiUAJh2et1r3klUzPv2xIliFSJGU_ez8WE77ELvAw/edit?gid=0#gid=0"
@@ -1136,8 +1135,8 @@ def main():
                     sheets_opened = True
                     webbrowser.open_new_tab(target_url)
                     
-                    print("[GOOGLE SHEETS] Waiting 9 seconds for Google Sheets to fully load...")
-                    time.sleep(9.0)
+                    print("[GOOGLE SHEETS] Waiting 4.5 seconds for Google Sheets to load...")
+                    time.sleep(4.5)
                     
                     print("[GOOGLE SHEETS] Navigating to the next empty row from bottom...")
                     # 1. Ctrl+End lands on the bottom-right corner of the used data range
@@ -1174,6 +1173,26 @@ def main():
                     time.sleep(0.5)
                     
                     print("[GOOGLE SHEETS] Data successfully logged!")
+                    
+                    # Record withdrawal_id as successfully completed
+                    if withdrawal_id:
+                        try:
+                            today_str = datetime.date.today().strftime("%Y-%m-%d")
+                            completed = set()
+                            if os.path.exists("completed_ids.json"):
+                                with open("completed_ids.json", "r") as f:
+                                    data = json.load(f)
+                                if isinstance(data, dict):
+                                    if data.get("date") == today_str:
+                                        completed = set(data.get("ids", []))
+                                elif isinstance(data, list):
+                                    completed = set(data)
+                            completed.add(str(withdrawal_id).strip())
+                            with open("completed_ids.json", "w") as f:
+                                json.dump({"date": today_str, "ids": sorted(list(completed))}, f, indent=2)
+                            print(f"[STATE] Withdrawal ID {withdrawal_id} recorded in completed_ids.json.")
+                        except Exception as e:
+                            print(f"[STATE] Error saving completed ID: {e}")
                     
                     # Clean up tabs safely
                     cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
