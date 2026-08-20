@@ -292,6 +292,13 @@ def main():
         else:
             print(f"[PLAYBISON] No duplicate accounts found for {fn} {ln}.")
             approval_status = "Approve"
+            
+        # Close Duplicates tab immediately
+        if duplicates_opened:
+            print("[PLAYBISON] Closing Duplicates tab...")
+            pyautogui.hotkey('ctrl', 'w')
+            time.sleep(0.3)
+            duplicates_opened = False
     
     # Detect name mismatch errors
     is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
@@ -459,6 +466,14 @@ def main():
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (>= 25%)! Proceeding with flow (Approval status: 'W/d ratio > 25%').")
             else:
                 print(f"\n[DATASTUDIO] W/D ratio is {ratio_val}% (< 25%)! Proceeding to Playbison for manual cancellation check!")
+            
+            # Close Data Studio tab immediately before opening wallet
+            if datastudio_opened:
+                print("[DATASTUDIO] Closing Data Studio tab...")
+                pyautogui.hotkey('ctrl', 'w')
+                time.sleep(0.3)
+                datastudio_opened = False
+                
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
@@ -545,6 +560,7 @@ def main():
                 notes_have_req = False
                 has_doc_req = False
                 mistral_failed = False
+                notes_cc_ver = False  # True if notes tab already has 'cc ver' recorded
                 for i in range(15):
                     pyperclip.copy("WAITING_FOR_NOTES")
                     pyperclip.copy(js_check_notes)
@@ -563,11 +579,15 @@ def main():
                         res_part = clip_val.replace("REQ_FOUND:", "")
                         if "|" in res_part:
                             parts = res_part.split("|")
-                            note_txt = parts[1].replace("TEXT:", "")
+                            note_txt = parts[1].replace("TEXT:", "") if len(parts) > 1 else ""
+                            # Parse optional |CC_VER: field
+                            for p in parts[2:]:
+                                if p.startswith("CC_VER:"):
+                                    notes_cc_ver = p.replace("CC_VER:", "").strip() == "YES"
                             if note_txt != "NOTES_NOT_FOUND":
                                 if parts[0] == "YES":
                                     notes_have_req = True
-                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req})")
+                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req}, CC verified: {notes_cc_ver})")
                                 break
                     time.sleep(0.5)
 
@@ -971,22 +991,36 @@ def main():
                 last_deposit_op = "NOT_FOUND"
                 withdrawal_op = playbison_op
                 has_doc_req = False
+                cc_dep_count = 0      # Number of completed CC deposits in payment log
+                paylog_cc_ver = False  # True if any payment log note row has 'cc ver'
                 
                 if payment_log_val.startswith("DEP_OP:"):
                     dep_part = payment_log_val.replace("DEP_OP:", "")
                     if "|WITH_OP:" in dep_part:
                         parts = dep_part.split("|WITH_OP:")
                         last_deposit_op = parts[0]
-                        with_doc_part = parts[1]
-                        if "|DOC:" in with_doc_part:
-                            op_parts = with_doc_part.split("|DOC:")
+                        with_rest = parts[1]
+                        if "|DOC:" in with_rest:
+                            op_parts = with_rest.split("|DOC:")
                             if op_parts[0] != "NOT_FOUND":
                                 withdrawal_op = op_parts[0]
-                            if op_parts[1] == "YES":
+                            doc_rest = op_parts[1] if len(op_parts) > 1 else ""
+                            # Parse |CC_DEP_COUNT: and |CC_VER: from the remainder
+                            doc_fields = doc_rest.split("|")
+                            doc_val = doc_fields[0].strip()
+                            if doc_val == "YES":
                                 has_doc_req = True
+                            for field in doc_fields[1:]:
+                                if field.startswith("CC_DEP_COUNT:"):
+                                    try:
+                                        cc_dep_count = int(field.replace("CC_DEP_COUNT:", "").strip())
+                                    except ValueError:
+                                        pass
+                                elif field.startswith("CC_VER:"):
+                                    paylog_cc_ver = field.replace("CC_VER:", "").strip() == "YES"
                         else:
-                            if with_doc_part != "NOT_FOUND":
-                                withdrawal_op = with_doc_part
+                            if with_rest != "NOT_FOUND":
+                                withdrawal_op = with_rest
                     else:
                         last_deposit_op = dep_part
                 
@@ -1020,6 +1054,13 @@ def main():
                 
                 # Use the true player_id extracted from the wallet page
                 extracted_id = true_player_id
+                
+                # Close Wallet tab immediately before opening Google Sheets
+                if wallet_opened:
+                    print("[PLAYBISON] Closing Wallet tab...")
+                    pyautogui.hotkey('ctrl', 'w')
+                    time.sleep(0.3)
+                    wallet_opened = False
                 
                 if extracted_id and extracted_id.isdigit():
                     print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
@@ -1087,12 +1128,43 @@ def main():
                             print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
                             approval_status = "Cancel (Mismatch Operator)"
                     
-                    # Credit Card last deposit always requires CC verification
-                    # Flag as "Verify docs" unless already a harder status like Cancel
-                    if "CREDITCARD" in dep_norm or "CREDIT" in dep_norm or "PAYMENTIQCREDITCARD" in dep_norm:
-                        if approval_status not in ["Cancel (Mismatch Operator)", "Review (Duplicates)"]:
-                            print(f"[PLAYBISON] Last deposit via Credit Card ('{last_deposit_op}'). Flagging as 'Verify docs' — CC verification required.")
-                            approval_status = "Verify docs"
+                    # Credit Card last deposit — smart 3-rule logic:
+                    # Rule 1: If 'cc ver' detected in Notes tab OR Payment Log → CC already verified → Approve
+                    # Rule 2: First-time CC user (only 1 CC deposit) with no 'cc ver' → Verify docs
+                    # Rule 3: Repeat CC user (2+ CC deposits) → W/D ratio applies normally → Approve
+                    cc_already_verified = notes_cc_ver or paylog_cc_ver
+                    is_cc_dep = "CREDITCARD" in dep_norm or "CREDIT" in dep_norm or "PAYMENTIQCREDITCARD" in dep_norm
+                    if is_cc_dep:
+                        if cc_already_verified:
+                            # Rule 1: CC is verified — always approve, ignore ratio and docs flag
+                            print(f"[PLAYBISON] Last deposit via Credit Card AND 'cc ver' found in notes/log. CC verified — approving.")
+                            if approval_status in ["W/D Ratio >= 25%", "Verify docs"]:
+                                approval_status = "Approve"
+                        elif cc_dep_count <= 1:
+                            # Rule 2: First-time CC user, no 'cc ver' → must verify
+                            if approval_status not in ["Cancel (Mismatch Operator)", "Review (Duplicates)"]:
+                                print(f"[PLAYBISON] First-time CC deposit (count={cc_dep_count}), no 'cc ver' in notes. Flagging as 'Verify docs'.")
+                                approval_status = "Verify docs"
+                        else:
+                            # Rule 3: Repeat CC user (2+ deposits) — ratio logic applies, don't force Verify docs
+                            print(f"[PLAYBISON] Repeat CC user (count={cc_dep_count}), no 'cc ver'. Ratio logic applies — status: {approval_status}.")
+
+                    
+                    # === EXEMPT PAYMENT METHODS: Bypass W/D Ratio >= 25% requirement ===
+                    # These payment providers always get withdrawal approval regardless of ratio.
+                    EXEMPT_DEP_KEYWORDS = [
+                        "PAYMENTIQCREDITCARD",   # PAYMENTIQ Credit Card
+                        "WEBREDIRECTAPPLEPAY",   # WEBREDIRECT APPLE PAY
+                        "WEBREDIRECTGOOGLEPAY",  # WEBREDIRECT GOOGLE PAY
+                        "WEBREDIRECTBITEXPROAPPLE",  # WEBREDIRECT BITEXPRO APPLE PAY
+                        "WEBREDIRECTBITEXPROGOOGLE", # WEBREDIRECT BITEXPRO GOOGLE PAY
+                        "ARI10GOOGLE",           # ARI10 GOOGLE
+                        "ARI10APPLE",            # ARI10 APPLE
+                    ]
+                    is_exempt_dep = any(kw in dep_norm for kw in EXEMPT_DEP_KEYWORDS)
+                    if is_exempt_dep and approval_status == "W/D Ratio >= 25%":
+                        print(f"[PLAYBISON] Last deposit via exempt payment method ('{last_deposit_op}'). W/D ratio check bypassed — proceeding with approval.")
+                        approval_status = "Approve"
                         
                     # Convert withdrawal amount to PLN if not already PLN
                     curr_upper = t_curr.strip().upper() if t_curr else "PLN"
@@ -1173,6 +1245,13 @@ def main():
                     time.sleep(0.5)
                     
                     print("[GOOGLE SHEETS] Data successfully logged!")
+                    
+                    # Close Google Sheets tab immediately
+                    if sheets_opened:
+                        print("[GOOGLE SHEETS] Closing Google Sheets tab...")
+                        pyautogui.hotkey('ctrl', 'w')
+                        time.sleep(0.3)
+                        sheets_opened = False
                     
                     # Record withdrawal_id as successfully completed
                     if withdrawal_id:

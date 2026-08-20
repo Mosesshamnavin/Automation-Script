@@ -82,9 +82,18 @@
     || lower.includes('send doc')
     || lower.includes('verify cc')
     || lower.includes('verify card');
+  
+  // Detect if CC is already verified in the notes
+  let lowerNorm = lower.replace(/[\s_\-]/g, '');
+  let ccAlreadyVerified = lowerNorm.includes('ccver')
+    || lowerNorm.includes('ccverified')
+    || lowerNorm.includes('cardverified')
+    || lowerNorm.includes('cardver');
+  
   let hasReq = needsVerifyDocs ? "YES" : "NO";
+  let ccVerFlag = ccAlreadyVerified ? "YES" : "NO";
   let input = document.createElement('input');
-  input.value = "REQ_FOUND:" + hasReq + "|TEXT:" + (text ? text.replace(/[\r\n]+/g, ' ') : "NOTES_NOT_FOUND");
+  input.value = "REQ_FOUND:" + hasReq + "|TEXT:" + (text ? text.replace(/[\r\n]+/g, ' ') : "NOTES_NOT_FOUND") + "|CC_VER:" + ccVerFlag;
   document.body.appendChild(input);
   input.select();
   document.execCommand('copy');
