@@ -185,6 +185,11 @@ def main():
     
     # Extract wallet_id from response
     wallet_id = ""
+    is_third_party_request = False
+    modal_account_holder = ""
+    wallet_id_and_rest = ""
+    rest = ""
+
     if "|WALLET:" in verify_raw:
         parts = verify_raw.split("|WALLET:")
         verify_raw = parts[0].strip()
@@ -201,12 +206,26 @@ def main():
     else:
         rest = ""
 
+    if "|THIRDPARTY:YES" in wallet_id_and_rest:
+        is_third_party_request = True
+    if "|ACCHOLDER:" in wallet_id_and_rest:
+        try:
+            ah_part = wallet_id_and_rest.split("|ACCHOLDER:")[1]
+            if "|THIRDPARTY:" in ah_part:
+                modal_account_holder = ah_part.split("|THIRDPARTY:")[0].strip()
+            else:
+                modal_account_holder = ah_part.strip()
+        except Exception:
+            pass
+
     # Extract fn, ln, city, op
     fn = ""
     ln = ""
     city = ""
     playbison_op = ""
     if rest:
+        if "|ACCHOLDER:" in rest:
+            rest = rest.split("|ACCHOLDER:")[0]
         if "|LN:" in rest:
             fn, rest = rest.split("|LN:")
             fn = fn.strip()
@@ -221,6 +240,24 @@ def main():
                     ln, city = rest.split("|CITY:")
                     ln = ln.strip()
                     city = city.strip()
+
+    # Cross-check accountHolder vs player name directly in Python
+    if modal_account_holder and (fn or ln or player_name):
+        import unicodedata
+        def _norm(s):
+            if not s: return ""
+            s = unicodedata.normalize('NFD', s)
+            s = "".join(c for c in s if unicodedata.category(c) != 'Mn')
+            return s.replace('ł', 'l').replace('Ł', 'L').lower().strip()
+        
+        fn_norm = _norm(fn)
+        ln_norm = _norm(ln)
+        pname_norm = _norm(player_name)
+        ah_norm = _norm(modal_account_holder)
+        name_match = (ln_norm and ln_norm in ah_norm) or (fn_norm and fn_norm in ah_norm) or (pname_norm and (pname_norm.split()[-1] in ah_norm or ah_norm in pname_norm))
+        if not name_match:
+            is_third_party_request = True
+            print(f"[PLAYBISON] ⚠️ THIRD PARTY REQUEST DETECTED: Player '{fn} {ln}' ({player_name}) vs Account Holder '{modal_account_holder}'")
 
     # Priority 1: If table scan already grabbed the full hex wallet_id, use it directly!
     if saved_wid and len(saved_wid) > 15 and "..." not in saved_wid and not saved_wid.startswith("NOT_FOUND"):
@@ -449,15 +486,23 @@ def main():
             print(f"[DATASTUDIO] New Raw W/D ratio text: '{ratio_raw}'")
     
     # Parse ratio float
+    is_no_data = False
     ratio_val = None
-    if ratio_raw and "HEADER_NOT_FOUND" not in ratio_raw and "NO_DATA" not in ratio_raw:
-        cleaned = ratio_raw.replace('%', '').replace(',', '.').strip()
-        match = re.search(r'[-+]?\d*\.?\d+', cleaned)
-        if match:
-            try:
-                ratio_val = float(match.group())
-            except ValueError:
-                pass
+    if ratio_raw:
+        raw_upper = ratio_raw.upper()
+        if "NO_DATA" in raw_upper or "NO DATA" in raw_upper:
+            is_no_data = True
+            ratio_val = 0.0
+            ratio_raw = "0%"
+            print("[DATASTUDIO] No data in Data Studio report (new account). Ratio set to 0.0%.")
+        elif "HEADER_NOT_FOUND" not in raw_upper:
+            cleaned = ratio_raw.replace('%', '').replace(',', '.').strip()
+            match = re.search(r'[-+]?\d*\.?\d+', cleaned)
+            if match:
+                try:
+                    ratio_val = float(match.group())
+                except ValueError:
+                    pass
 
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
@@ -560,7 +605,10 @@ def main():
                 notes_have_req = False
                 has_doc_req = False
                 mistral_failed = False
-                notes_cc_ver = False  # True if notes tab already has 'cc ver' recorded
+                note_txt = ""          # Top note text (safe default to avoid UnboundLocalError)
+                notes_cc_ver = False   # True if notes tab already has 'cc ver' recorded
+                notes_iban_ver = False  # True if IBAN verified in notes within last 180 days
+                notes_has_payment_notes = False  # True if payment/important notes exist
                 for i in range(15):
                     pyperclip.copy("WAITING_FOR_NOTES")
                     pyperclip.copy(js_check_notes)
@@ -580,14 +628,18 @@ def main():
                         if "|" in res_part:
                             parts = res_part.split("|")
                             note_txt = parts[1].replace("TEXT:", "") if len(parts) > 1 else ""
-                            # Parse optional |CC_VER: field
+                            # Parse optional |CC_VER:, |IBAN_VER:, and |PAYMENT_NOTES: fields
                             for p in parts[2:]:
                                 if p.startswith("CC_VER:"):
                                     notes_cc_ver = p.replace("CC_VER:", "").strip() == "YES"
+                                elif p.startswith("IBAN_VER:"):
+                                    notes_iban_ver = p.replace("IBAN_VER:", "").strip() == "YES"
+                                elif p.startswith("PAYMENT_NOTES:"):
+                                    notes_has_payment_notes = p.replace("PAYMENT_NOTES:", "").strip() == "YES"
                             if note_txt != "NOTES_NOT_FOUND":
                                 if parts[0] == "YES":
                                     notes_have_req = True
-                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req}, CC verified: {notes_cc_ver})")
+                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req}, CC verified: {notes_cc_ver}, IBAN verified: {notes_iban_ver}, Payment/Important notes: {notes_has_payment_notes})")
                                 break
                     time.sleep(0.5)
 
@@ -1096,7 +1148,18 @@ def main():
                     
                     approval_status = "Approve"
                     
-                    if ratio_val is not None and ratio_val >= 25.0:
+                    if is_no_data:
+                        # If the note confirms CC or IBAN verification, approve it!
+                        if notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower()):
+                            print(f"[PLAYBISON] No data in Data Studio, but notes confirm verification. Setting status to 'Approve'.")
+                            approval_status = "Approve"
+                        elif notes_has_payment_notes:
+                            print(f"[PLAYBISON] No data in Data Studio, and unverified payment/important notes exist. Setting status to 'Req last deposit'.")
+                            approval_status = "Req last deposit"
+                        else:
+                            print(f"[PLAYBISON] No data in Data Studio and no payment notes (new account). Setting status to 'Approve'.")
+                            approval_status = "Approve"
+                    elif ratio_val is not None and ratio_val >= 25.0:
                         approval_status = "W/D Ratio >= 25%"
                     
                     if dup_res == "YES":
@@ -1104,8 +1167,16 @@ def main():
                     elif mistral_failed:
                         approval_status = "Review (Mistral Failed)"
                         
-                    if notes_have_req or has_doc_req:
+                    if (notes_have_req or has_doc_req) and not notes_cc_ver:
+                        # Only flag Verify docs if the note is NOT already showing 'cc ver'
+                        # e.g. "CC 5375XXXXXXXX2674 ver" means it's already verified — don't re-ask
                         approval_status = "Verify docs"
+                    
+                    # Third Party Request check: account holder sending withdrawal request does not match player name
+                    if is_third_party_request:
+                        print(f"[PLAYBISON] Setting approval status to 'Third party request' (Account Holder mismatch: '{modal_account_holder}').")
+                        approval_status = "Third party request"
+
                         
                     # Check deposit operator vs withdrawal operator rules:
                     # If last deposit operator is Skrill, Paysafecard, or Coinspaid,
@@ -1193,6 +1264,21 @@ def main():
                         if approval_status == "Approve":
                             print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN. Setting approval status to 'Req IBAN'.")
                             approval_status = "Req IBAN"
+                    
+                    # === IBAN VERIFIED OVERRIDE ===
+                    # If status is 'Req IBAN' but a note within the last 180 days contains
+                    # 'iban ... ver' (e.g. "Iban: HU361... ver"), the IBAN is already verified.
+                    # Downgrade to 'Approve' so the limit check below can apply correctly.
+                    if approval_status == "Req IBAN" and notes_iban_ver:
+                        print(f"[PLAYBISON] IBAN verified within 180 days (detected in notes). Downgrading 'Req IBAN' to 'Approve'.")
+                        approval_status = "Approve"
+                    
+                    # === LIMIT REACHED CHECK (final override) ===
+                    # If the top note contains "limit reached", override whatever status we have.
+                    # Example note: "wd 6175982 sent/Today limit reached"
+                    if "limit reached" in (note_txt or "").lower():
+                        print(f"[PLAYBISON] 'Limit reached' detected in top note: '{note_txt}'. Overriding status to 'Limit Reached'.")
+                        approval_status = "Limit Reached"
                         
                     name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
                     withdrawal_id = player_id

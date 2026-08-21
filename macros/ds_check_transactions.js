@@ -286,14 +286,14 @@
   }
 
   function hasBlankInResults(container) {
-    if (!container) return { found: true, date: null };
+    if (!container) return { found: false, date: null };
     let { tbl, idx } = findNoteColIdx(container);
-    if (!tbl || idx === -1) return { found: true, date: null };
+    if (!tbl || idx === -1) return { found: false, date: null };
 
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
     let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(1, idx));
 
-    if (dataRows.length === 0) return { found: true, date: null };
+    if (dataRows.length === 0) return { found: false, date: null };
 
     let dateIdx = 1;
     for (let tr of allTrs) {

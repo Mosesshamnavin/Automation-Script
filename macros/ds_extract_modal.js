@@ -129,32 +129,32 @@
       if (!match) match = reqStr.match(/["']?maskedAccount["']?\s*[:=]\s*["']?([^,}\r\n]+)/i);
       let acc = match ? match[1].replace(/["']/g, '').trim() : '';
 
-      if (op.includes('PAYSAFECARD') || op.includes('SKRILL')) {
-        if (acc) {
-          prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
-        } else {
-          prompt('MISMATCH:', 'NAMEFAIL:maskedAccount not found|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
-        }
-        return;
-      } else {
-        let fnNorm = normStr(fn);
-        let lnNorm = normStr(ln);
-        let reqNorm = normStr(reqStr);
-        let fnMatch = !fnNorm || reqNorm.includes(fnNorm);
-        let lnMatch = !lnNorm || reqNorm.includes(lnNorm);
+      let matchAH = reqStr.match(/["']?accountHolder["']?\s*[:=]\s*["']([^"']+)["']/i);
+      if (!matchAH) matchAH = reqStr.match(/["']?accountHolder["']?\s*[:=]\s*["']?([^,}\r\n]+)/i);
+      let accountHolder = matchAH ? matchAH[1].replace(/["']/g, '').trim() : '';
 
-        if (fnMatch && lnMatch) {
-          if (acc) {
-            prompt('RESULT:', acc + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
-          } else {
-            prompt('RESULT:', (reqStr || 'OK') + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
-          }
-          return;
-        } else {
-          prompt('MISMATCH:', 'NAMEFAIL:' + fn + ' ' + ln + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
-          return;
+      let fnNorm = normStr(fn);
+      let lnNorm = normStr(ln);
+      let ahNorm = normStr(accountHolder);
+      let reqNorm = normStr(reqStr);
+
+      let isThirdParty = false;
+      if (accountHolder) {
+        let nameMatch = (lnNorm && ahNorm.includes(lnNorm)) || (fnNorm && ahNorm.includes(fnNorm));
+        if (!nameMatch) {
+          isThirdParty = true;
+        }
+      } else if (reqStr && (fnNorm || lnNorm)) {
+        let nameMatch = (!fnNorm || reqNorm.includes(fnNorm)) || (!lnNorm || reqNorm.includes(lnNorm));
+        if (!nameMatch) {
+          isThirdParty = true;
         }
       }
+
+      let tpFlag = isThirdParty ? "YES" : "NO";
+      let resPrefix = isThirdParty ? ("NAMEFAIL:" + (accountHolder || (fn + ' ' + ln))) : (acc || 'OK');
+      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + accountHolder + '|THIRDPARTY:' + tpFlag);
+      return;
     }
 
     prompt('ERROR:', 'NOTFOUND|WALLET:');
