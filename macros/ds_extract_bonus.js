@@ -53,6 +53,24 @@
     if (typeof el.click === 'function') el.click();
   }
 
+  // ── Find all bonus tables (Active Queue + Historical) ──────────────────────
+  function getAllBonusTables() {
+    let list = [];
+    for (let doc of getFrames()) {
+      if (!doc) continue;
+      let tables = Array.from(doc.querySelectorAll('table'));
+      for (let t of tables) {
+        if (t.offsetWidth === 0 && t.offsetHeight === 0) continue;
+        let ths = Array.from(t.querySelectorAll('th')).map(th => th.textContent.toLowerCase().trim());
+        let isBonusTbl = ths.some(txt => txt === 'bonus name' || txt === 'bonus code' || txt.includes('application date') || txt.includes('enqueue date'));
+        if (isBonusTbl) {
+          list.push({ tbl: t, doc: doc });
+        }
+      }
+    }
+    return list;
+  }
+
   // ── Find historical bonus table ────────────────────────────────────────────
   function findHistoricalTable() {
     for (let doc of getFrames()) {
@@ -85,13 +103,15 @@
         if (txt.includes('application date')) appDateIdx = i;
         if (txt.includes('enqueue date')) enqDateIdx = i;
       }
-      if (appDateIdx !== -1) break;
+      if (nameIdx !== -1 && (appDateIdx !== -1 || enqDateIdx !== -1)) break;
     }
 
     if (nameIdx === -1) nameIdx = 2;
     if (codeIdx === -1) codeIdx = 3;
-    if (appDateIdx === -1) appDateIdx = 4;
-    if (enqDateIdx === -1) enqDateIdx = 5;
+    if (appDateIdx === -1 && enqDateIdx === -1) {
+      appDateIdx = 4;
+      enqDateIdx = 5;
+    }
 
     let maxIdx = Math.max(nameIdx, codeIdx, appDateIdx, enqDateIdx);
     let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > maxIdx);
@@ -100,11 +120,11 @@
     let dateMatchWithCodeOnly = null;
 
     for (let tr of dataRows) {
-      let bName = (tr.children[nameIdx] ? tr.children[nameIdx].textContent : '').trim();
-      let bCode = (tr.children[codeIdx] ? tr.children[codeIdx].textContent : '').trim();
+      let bName = (nameIdx !== -1 && tr.children[nameIdx]) ? tr.children[nameIdx].textContent.trim() : '';
+      let bCode = (codeIdx !== -1 && tr.children[codeIdx]) ? tr.children[codeIdx].textContent.trim() : '';
 
-      let appDateStr = (tr.children[appDateIdx] ? tr.children[appDateIdx].textContent : '').trim();
-      let enqDateStr = (tr.children[enqDateIdx] ? tr.children[enqDateIdx].textContent : '').trim();
+      let appDateStr = (appDateIdx !== -1 && tr.children[appDateIdx]) ? tr.children[appDateIdx].textContent.trim() : '';
+      let enqDateStr = (enqDateIdx !== -1 && tr.children[enqDateIdx]) ? tr.children[enqDateIdx].textContent.trim() : '';
 
       let isDateMatch = (appDateStr && appDateStr.includes(targetDateYMD)) ||
                         (enqDateStr && enqDateStr.includes(targetDateYMD));
@@ -177,15 +197,20 @@
   }
 
   function doScan() {
+    // 1. Check all visible bonus tables on the page (including Active Queue)
+    let allTbls = getAllBonusTables();
+    for (let item of allTbls) {
+      let res = scanCurrentPage(item.tbl);
+      if (res && res.exact) {
+        copyToClipboard("BONUS_RESULT:" + res.name);
+        return;
+      }
+    }
+
+    // 2. Locate historical table for pagination
     let found = findHistoricalTable();
     if (!found) {
       finishScan();
-      return;
-    }
-
-    let result = scanCurrentPage(found.tbl);
-    if (result && result.exact) {
-      copyToClipboard("BONUS_RESULT:" + result.name);
       return;
     }
 

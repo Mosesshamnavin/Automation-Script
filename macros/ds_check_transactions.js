@@ -687,17 +687,15 @@
             if (freshDateInput && blankDate) {
               let parsedDate = new Date(blankDate);
               if (!isNaN(parsedDate.getTime())) {
-                let newVal = parsedDate.getUTCFullYear() + "-" + String(parsedDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getUTCDate()).padStart(2, "0") + " 00:00";
+                let newVal = parsedDate.getFullYear() + "-" + String(parsedDate.getMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getDate()).padStart(2, "0") + " 00:00";
                 setVal(freshDateInput, newVal);
               }
             }
-            if (freshDateToInput && blankDate) {
-              let parsedDate = new Date(blankDate);
-              if (!isNaN(parsedDate.getTime())) {
-                parsedDate.setUTCMinutes(parsedDate.getUTCMinutes() + 1);
-                let newVal = parsedDate.getUTCFullYear() + "-" + String(parsedDate.getUTCMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getUTCDate()).padStart(2, "0") + " " + String(parsedDate.getUTCHours()).padStart(2, "0") + ":" + String(parsedDate.getUTCMinutes()).padStart(2, "0");
-                setVal(freshDateToInput, newVal);
-              }
+            if (freshDateToInput) {
+              let now = new Date();
+              now.setDate(now.getDate() + 1);
+              let toVal = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " 23:59";
+              setVal(freshDateToInput, toVal);
             }
 
             setTimeout(() => {
