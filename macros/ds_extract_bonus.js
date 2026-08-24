@@ -1,29 +1,36 @@
 (function() {
   let rawTargetDate = "###STACK_DATE###";
-  let targetTime = new Date(rawTargetDate).getTime();
   let targetDateYMD = rawTargetDate;
   if (targetDateYMD.includes("T")) {
     targetDateYMD = targetDateYMD.split("T")[0];
   } else if (targetDateYMD.includes(" ")) {
     targetDateYMD = targetDateYMD.split(" ")[0];
   }
+  let targetTime = new Date(targetDateYMD).getTime();
 
   let closestBonus = null;
   let minDiff = Infinity;
 
   function copyToClipboard(text) {
     try {
-      let ta = document.createElement('textarea');
+      let ta = document.getElementById('__bonus_result_holder__');
+      if (!ta) {
+        ta = document.createElement('textarea');
+        ta.id = '__bonus_result_holder__';
+        ta.style.position = 'fixed';
+        ta.style.top = '10px';
+        ta.style.left = '10px';
+        ta.style.zIndex = '999999';
+        ta.style.width = '300px';
+        ta.style.height = '60px';
+        ta.style.backgroundColor = '#ffffcc';
+        ta.style.border = '2px solid #333';
+        document.body.appendChild(ta);
+      }
       ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.top = '0';
-      ta.style.left = '0';
-      ta.style.opacity = '0.01';
-      document.body.appendChild(ta);
-      ta.select();
       ta.focus();
-      document.execCommand('copy');
-      setTimeout(() => { try { document.body.removeChild(ta); } catch(e){} }, 30000);
+      ta.select();
+      try { document.execCommand('copy'); } catch(e){}
     } catch (e) {}
   }
 
@@ -37,6 +44,7 @@
   }
 
   function simClick(el) {
+    if (!el) return;
     el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
     el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
@@ -45,23 +53,11 @@
     if (typeof el.click === 'function') el.click();
   }
 
-  function setVal(el, val) {
-    try { el.focus(); } catch(e) {}
-    let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    if (setter) setter.call(el, val); else el.value = val;
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    el.dispatchEvent(new Event('keyup', { bubbles: true }));
-    el.dispatchEvent(new Event('blur', { bubbles: true }));
-  }
-
   // ── Find historical bonus table ────────────────────────────────────────────
   function findHistoricalTable() {
     for (let doc of getFrames()) {
       if (!doc) continue;
       let tables = Array.from(doc.querySelectorAll('table'));
-      // Must find the HISTORICAL table, which has 'Application date'
-      // (The active 'Bonus queue' table only has 'Enqueue date')
       let histTbl = tables.find(t =>
         (t.offsetWidth > 0 || t.offsetHeight > 0) &&
         Array.from(t.querySelectorAll('th')).some(th => {
@@ -74,11 +70,10 @@
     return null;
   }
 
-  // ── Scan one page for the target date ────────────────────────────────────
+  // ── Scan current page for matching bonus date ──────────────────────────────
   function scanCurrentPage(tbl) {
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
-    let nameIdx = -1, dateIdx = -1;
-    let passedTarget = false;
+    let nameIdx = -1, codeIdx = -1, appDateIdx = -1, enqDateIdx = -1;
 
     for (let tr of allTrs) {
       if (!tr.querySelector('th')) continue;
@@ -86,73 +81,91 @@
       for (let i = 0; i < cells.length; i++) {
         let txt = cells[i].textContent.toLowerCase().trim();
         if (txt === 'bonus name') nameIdx = i;
-        if (txt.includes('application date')) dateIdx = i;
+        if (txt === 'bonus code') codeIdx = i;
+        if (txt.includes('application date')) appDateIdx = i;
+        if (txt.includes('enqueue date')) enqDateIdx = i;
       }
-      if (nameIdx !== -1 && dateIdx !== -1) break;
+      if (appDateIdx !== -1) break;
     }
 
     if (nameIdx === -1) nameIdx = 2;
-    if (dateIdx === -1) dateIdx = 4;
+    if (codeIdx === -1) codeIdx = 3;
+    if (appDateIdx === -1) appDateIdx = 4;
+    if (enqDateIdx === -1) enqDateIdx = 5;
 
-    let maxIdx = Math.max(nameIdx, dateIdx);
+    let maxIdx = Math.max(nameIdx, codeIdx, appDateIdx, enqDateIdx);
     let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > maxIdx);
-    for (let tr of dataRows) {
-      let rawDateStr = (tr.children[dateIdx].textContent || '').trim();
-      let cleanDateStr = rawDateStr.replace(/\s+/g, ' ').trim();
-      let parseableDateStr = cleanDateStr.replace(' ', 'T');
-      let bonusName = (tr.children[nameIdx].textContent || '').trim();
-      if (!bonusName) continue;
 
-      if (cleanDateStr.includes(targetDateYMD) || parseableDateStr.includes(targetDateYMD)) {
-        return { exact: true, name: bonusName };
+    let dateMatchWithBonusName = null;
+    let dateMatchWithCodeOnly = null;
+
+    for (let tr of dataRows) {
+      let bName = (tr.children[nameIdx] ? tr.children[nameIdx].textContent : '').trim();
+      let bCode = (tr.children[codeIdx] ? tr.children[codeIdx].textContent : '').trim();
+
+      let appDateStr = (tr.children[appDateIdx] ? tr.children[appDateIdx].textContent : '').trim();
+      let enqDateStr = (tr.children[enqDateIdx] ? tr.children[enqDateIdx].textContent : '').trim();
+
+      let isDateMatch = (appDateStr && appDateStr.includes(targetDateYMD)) ||
+                        (enqDateStr && enqDateStr.includes(targetDateYMD));
+
+      if (isDateMatch) {
+        if (bName) {
+          // Explicit Bonus Name found on target date — HIGHEST PRIORITY!
+          return { exact: true, name: bName };
+        } else if (bCode && !dateMatchWithCodeOnly) {
+          dateMatchWithCodeOnly = bCode;
+        }
       }
 
-      let rowTime = new Date(parseableDateStr).getTime();
-      if (!isNaN(rowTime) && !isNaN(targetTime)) {
-        let diff = Math.abs(rowTime - targetTime);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestBonus = bonusName;
-        }
-        if (rowTime < targetTime) {
-          passedTarget = true;
+      // Fallback tracking
+      let eff = bName || bCode;
+      let dateToCheck = appDateStr || enqDateStr;
+      if (eff && dateToCheck) {
+        let rowTime = new Date(dateToCheck.replace(' ', 'T')).getTime();
+        if (!isNaN(rowTime) && !isNaN(targetTime)) {
+          let diff = Math.abs(rowTime - targetTime);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestBonus = eff;
+          }
         }
       }
     }
-    
-    return { exact: false, stopScan: passedTarget };
+
+    if (dateMatchWithCodeOnly) {
+      return { exact: true, name: dateMatchWithCodeOnly };
+    }
+
+    return { exact: false };
   }
 
-  // ── Find Next button in the historical section ────────────────────────────
-  function findNextBtn(tbl) {
+  // ── Find Next / Page controls for historical section ───────────────────────
+  function findNextButton(tbl) {
     let container = tbl.parentElement;
     while (container && container !== document.body) {
       let allBtns = Array.from(container.querySelectorAll('button, a, input[type="button"], div[role="button"]'));
       let nextBtn = allBtns.find(b => {
         let txt = (b.textContent || b.value || '').toLowerCase().trim();
-        let isNext = txt === 'next' || txt.startsWith('next');
+        let isNext = txt === 'next' || txt.startsWith('next') || txt.includes('next') || txt === 'next→' || txt === 'next →';
         let isDisabled = b.disabled || b.classList.contains('disabled') ||
                          (b.parentElement && b.parentElement.classList.contains('disabled'));
         return isNext && !isDisabled && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
       });
-      if (nextBtn) return { goBtn: null, nextBtn: nextBtn };
 
-      let goBtn = allBtns.find(b =>
-        (b.textContent || b.value || '').toLowerCase().trim() === 'go' &&
-        (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0)
-      );
-      let pageInput = Array.from(container.querySelectorAll('input[type="text"], input[type="number"]')).find(inp =>
-        inp.offsetWidth > 0 && /^\d+$/.test((inp.value || '').trim())
-      );
-      if (goBtn && pageInput) return { goBtn: goBtn, pageInput: pageInput };
-
+      if (nextBtn) return nextBtn;
       container = container.parentElement;
     }
     return null;
   }
 
-  // ── Paginator ─────────────────────────────────────────────────────────────
-  let currentPage = 1;
+  function getFirstRowSignature(tbl) {
+    let trs = Array.from(tbl.querySelectorAll('tr')).filter(r => r.querySelector('td'));
+    return trs.length > 0 ? trs[0].textContent.trim().substring(0, 50) : '';
+  }
+
+  // ── Paginator Loop ────────────────────────────────────────────────────────
+  let pageCount = 1;
   const MAX_PAGES = 15;
 
   function finishScan() {
@@ -163,15 +176,10 @@
     }
   }
 
-  function checkPage() {
+  function doScan() {
     let found = findHistoricalTable();
     if (!found) {
-      if (currentPage === 1) {
-        setTimeout(checkPage, 2000);
-        currentPage = 1.5;
-      } else {
-        finishScan();
-      }
+      finishScan();
       return;
     }
 
@@ -180,32 +188,46 @@
       copyToClipboard("BONUS_RESULT:" + result.name);
       return;
     }
-    if (result && result.stopScan && closestBonus) {
+
+    if (pageCount >= MAX_PAGES) {
       finishScan();
       return;
     }
 
-    if (currentPage >= MAX_PAGES) {
+    let nextBtn = findNextButton(found.tbl);
+    if (!nextBtn) {
       finishScan();
       return;
     }
 
-    let nextEl = findNextBtn(found.tbl);
-    if (!nextEl) {
-      finishScan();
-      return;
+    let oldSig = getFirstRowSignature(found.tbl);
+    pageCount++;
+    simClick(nextBtn);
+
+    // Wait for page to change
+    let waitAttempts = 0;
+    function waitForPageChange() {
+      waitAttempts++;
+      let cur = findHistoricalTable();
+      if (cur) {
+        let newSig = getFirstRowSignature(cur.tbl);
+        if (newSig && newSig !== oldSig) {
+          // Page successfully loaded new data!
+          setTimeout(doScan, 400);
+          return;
+        }
+      }
+      if (waitAttempts < 20) {
+        setTimeout(waitForPageChange, 400);
+      } else {
+        // Fallback: proceed to scan anyway
+        doScan();
+      }
     }
 
-    currentPage++;
-    if (nextEl.goBtn) {
-      setVal(nextEl.pageInput, String(currentPage));
-      setTimeout(() => { simClick(nextEl.goBtn); setTimeout(checkPage, 3000); }, 300);
-    } else {
-      simClick(nextEl.nextBtn);
-      setTimeout(checkPage, 3000);
-    }
+    setTimeout(waitForPageChange, 600);
   }
 
   // ── Entry point ───────────────────────────────────────────────────────────
-  checkPage();
+  setTimeout(doScan, 500);
 })();

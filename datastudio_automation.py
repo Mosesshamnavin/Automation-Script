@@ -979,8 +979,7 @@ def main():
                                 time.sleep(5.0)
 
                                 # ── Phase 3: Inject scan-only macro ──────────────────────────
-                                js_bonus = load_macro("ds_extract_bonus.js")
-                                js_bonus = js_bonus.replace("###STACK_DATE###", stack_date)
+                                js_bonus = load_macro("ds_extract_bonus.js", STACK_DATE=stack_date)
 
                                 pyperclip.copy("__WAITING_BONUS__")
                                 pyperclip.copy(js_bonus)
@@ -996,6 +995,8 @@ def main():
                                 bonus_name = ""
                                 for _ in range(90):
                                     time.sleep(1.0)
+                                    pyautogui.hotkey('ctrl', 'c')
+                                    time.sleep(0.2)
                                     clip_val = pyperclip.paste().strip()
                                     if clip_val.startswith("BONUS_RESULT:"):
                                         bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
@@ -1149,8 +1150,10 @@ def main():
                     approval_status = "Approve"
                     
                     if is_no_data:
-                        # If the note confirms CC or IBAN verification, approve it!
-                        if notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower()):
+                        if notes_have_req or has_doc_req:
+                            print(f"[PLAYBISON] No data in Data Studio, but active document request detected in top note. Setting status to 'Verify docs'.")
+                            approval_status = "Verify docs"
+                        elif notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower() and "rem" not in note_txt.lower()):
                             print(f"[PLAYBISON] No data in Data Studio, but notes confirm verification. Setting status to 'Approve'.")
                             approval_status = "Approve"
                         elif notes_has_payment_notes:
@@ -1167,9 +1170,8 @@ def main():
                     elif mistral_failed:
                         approval_status = "Review (Mistral Failed)"
                         
-                    if (notes_have_req or has_doc_req) and not notes_cc_ver:
-                        # Only flag Verify docs if the note is NOT already showing 'cc ver'
-                        # e.g. "CC 5375XXXXXXXX2674 ver" means it's already verified — don't re-ask
+                    if notes_have_req or has_doc_req:
+                        # Top note has active 'req' or 'rem' keyword, or pending doc exists
                         approval_status = "Verify docs"
                     
                     # Third Party Request check: account holder sending withdrawal request does not match player name
@@ -1200,14 +1202,14 @@ def main():
                             approval_status = "Cancel (Mismatch Operator)"
                     
                     # Credit Card last deposit — smart 3-rule logic:
-                    # Rule 1: If 'cc ver' detected in Notes tab OR Payment Log → CC already verified → Approve
+                    # Rule 1: If 'cc ver' detected in Notes tab OR Payment Log and NO active doc request → CC already verified → Approve
                     # Rule 2: First-time CC user (only 1 CC deposit) with no 'cc ver' → Verify docs
                     # Rule 3: Repeat CC user (2+ CC deposits) → W/D ratio applies normally → Approve
                     cc_already_verified = notes_cc_ver or paylog_cc_ver
                     is_cc_dep = "CREDITCARD" in dep_norm or "CREDIT" in dep_norm or "PAYMENTIQCREDITCARD" in dep_norm
                     if is_cc_dep:
-                        if cc_already_verified:
-                            # Rule 1: CC is verified — always approve, ignore ratio and docs flag
+                        if cc_already_verified and not notes_have_req:
+                            # Rule 1: CC is verified and no active doc request — approve
                             print(f"[PLAYBISON] Last deposit via Credit Card AND 'cc ver' found in notes/log. CC verified — approving.")
                             if approval_status in ["W/D Ratio >= 25%", "Verify docs"]:
                                 approval_status = "Approve"

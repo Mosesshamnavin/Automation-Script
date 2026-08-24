@@ -80,6 +80,13 @@
     let inputs = Array.from(container.querySelectorAll('input'));
     for (let inp of inputs) {
       if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let attr = ((inp.placeholder || '') + ' ' + (inp.name || '') + ' ' + (inp.id || '') + ' ' + (inp.getAttribute('ng-model') || '')).toLowerCase();
+      if ((attr.includes('date') && attr.includes('from')) || attr.includes('datefrom') || attr.includes('date_from')) {
+        return inp;
+      }
+    }
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
       let p = inp.parentElement;
       for (let level = 0; level < 5 && p && p !== container; level++) {
         let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -96,6 +103,13 @@
   function findDateToInput(container) {
     if (!container) return null;
     let inputs = Array.from(container.querySelectorAll('input'));
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let attr = ((inp.placeholder || '') + ' ' + (inp.name || '') + ' ' + (inp.id || '') + ' ' + (inp.getAttribute('ng-model') || '')).toLowerCase();
+      if ((attr.includes('date') && attr.includes('to')) || attr.includes('dateto') || attr.includes('date_to')) {
+        return inp;
+      }
+    }
     for (let inp of inputs) {
       if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
       let p = inp.parentElement;
