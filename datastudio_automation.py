@@ -1210,6 +1210,30 @@ def main():
                         print(f"[PLAYBISON] GB IBAN detected in maskedAccount/IBAN. Setting approval status to 'Reject'.")
                         approval_status = "Reject"
 
+                    # === STACK VALUE OVER 100 PLN RULE ===
+                    # If stack exists and total stack value > 100 PLN, status is 'Reject'
+                    if trans_result and trans_result not in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
+                        total_stack_pln = 0.0
+                        stack_matches = re.findall(r'[-]?(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*\*\s*(\d+)', trans_result_clean)
+                        for amt_str, cur_str, count_str in stack_matches:
+                            try:
+                                b_amt = float(amt_str)
+                                b_cnt = int(count_str)
+                                c_code = cur_str.upper() if cur_str else "PLN"
+                                if "EUR" in c_code or "USD" in c_code:
+                                    b_amt_pln = b_amt * 4.25
+                                elif "HUF" in c_code:
+                                    b_amt_pln = b_amt / 90.0
+                                else:
+                                    b_amt_pln = b_amt
+                                total_stack_pln += (b_amt_pln * b_cnt)
+                            except Exception:
+                                pass
+                        
+                        if total_stack_pln > 100.0:
+                            print(f"[PLAYBISON] Stack value ({total_stack_pln:.2f} PLN) > 100 PLN. Setting approval status to 'Reject'.")
+                            approval_status = "Reject"
+
                         
                     # Check deposit operator vs withdrawal operator rules:
                     # If last deposit operator is Skrill, Paysafecard, or Coinspaid,
