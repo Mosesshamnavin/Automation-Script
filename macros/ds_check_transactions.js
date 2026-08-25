@@ -237,20 +237,29 @@
     return null;
   }
 
-  function findSearchButtonForInput(inputEl, doc) {
+  function findSearchButton(container, inputEl) {
+    // 1. Try finding search button inside the closest form/filter container
     if (inputEl) {
-      let p = inputEl.parentElement;
-      while (p && p !== (doc ? doc.body : null)) {
-        let btns = Array.from(p.querySelectorAll('button, input, a, div[role="button"]'));
+      let formOrFilter = inputEl.closest('form, [class*="filter"], [class*="tab-pane"], [class*="modal"]');
+      if (formOrFilter) {
+        let btns = Array.from(formOrFilter.querySelectorAll('button, input[type="submit"], input[type="button"], a.btn, a'));
         let sBtn = btns.find(b => {
           let t = (b.textContent || b.value || '').toLowerCase().trim();
-          return t === 'search' && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+          return t === 'search' && !t.includes('clear') && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
         });
         if (sBtn) return sBtn;
-        p = p.parentElement;
       }
     }
-    return findSearchButton(doc);
+    // 2. Try finding within the modal container
+    if (container) {
+      let btns = Array.from(container.querySelectorAll('button, input[type="submit"], input[type="button"], a.btn, a'));
+      let sBtn = btns.find(b => {
+        let t = (b.textContent || b.value || '').toLowerCase().trim();
+        return t === 'search' && !t.includes('clear') && (b.offsetWidth > 0 || b.getBoundingClientRect().width > 0);
+      });
+      if (sBtn) return sBtn;
+    }
+    return null;
   }
 
   function findNoteColIdx(container) {
@@ -310,22 +319,51 @@
     if (dataRows.length === 0) return { found: false, date: null };
 
     let dateIdx = 1;
+    let balBeforeIdx = -1, balAfterIdx = -1;
+
     for (let tr of allTrs) {
       if (tr.querySelector('th')) {
         let cells = Array.from(tr.children);
         for (let i = 0; i < cells.length; i++) {
-          if (cells[i].textContent.toLowerCase().trim() === 'date') dateIdx = i;
+          let t = cells[i].textContent.toLowerCase().trim();
+          if (t === 'date') dateIdx = i;
+          if (t === 'before' && i >= 10 && i < 13) balBeforeIdx = i;
+          if (t === 'after' && i >= 11 && i <= 13) balAfterIdx = i;
+          if (t.includes('balance') && t.includes('before')) balBeforeIdx = i;
+          if (t.includes('balance') && t.includes('after')) balAfterIdx = i;
         }
         break;
       }
     }
 
+    if (balBeforeIdx === -1) balBeforeIdx = 11;
+    if (balAfterIdx === -1) balAfterIdx = 12;
+
     for (let tr of dataRows) {
       let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
-      if (txt === '' || !txt.includes('automatic')) {
-        let dateStr = tr.children[dateIdx] ? (tr.children[dateIdx].textContent || '').trim() : null;
-        return { found: true, date: dateStr };
+      // If note contains 'automatic', skip it (already verified automatic)
+      if (txt.includes('automatic')) continue;
+
+      let inValStr = tr.children.length > 6 ? tr.children[6].textContent.trim() : '0';
+      let inVal = Math.abs(parseFloat(inValStr.replace(',', '.')) || 0);
+
+      let balBeforeStr = tr.children.length > balBeforeIdx ? tr.children[balBeforeIdx].textContent.trim() : '0';
+      let balAfterStr = tr.children.length > balAfterIdx ? tr.children[balAfterIdx].textContent.trim() : '0';
+      let bBefore = parseFloat(balBeforeStr.replace(',', '.')) || 0;
+      let bAfter = parseFloat(balAfterStr.replace(',', '.')) || 0;
+
+      let bonBefore = tr.children.length > (balAfterIdx + 1) ? (parseFloat(tr.children[balAfterIdx + 1].textContent.trim().replace(',', '.')) || 0) : 0;
+      let bonAfter = tr.children.length > (balAfterIdx + 2) ? (parseFloat(tr.children[balAfterIdx + 2].textContent.trim().replace(',', '.')) || 0) : 0;
+
+      // Check if this row is an inactive forfeiture/zero-change row where player received 0 funds
+      let isUnchanged = (inVal === 0) && (bBefore === bAfter) && (bonAfter <= bonBefore);
+      if (isUnchanged) {
+        continue;
       }
+
+      // Real bonus redemption detected!
+      let dateStr = tr.children[dateIdx] ? (tr.children[dateIdx].textContent || '').trim() : null;
+      return { found: true, date: dateStr };
     }
     return { found: false, date: null };
   }
@@ -626,17 +664,13 @@
 
       for (let doc of getFrames()) {
         if (!doc) continue;
-        modalContainer = doc;
+        modalContainer = getActiveModalContainer(tTab, doc);
         dateInput = findDateFromInput(modalContainer);
-        if (!dateInput) {
-          modalContainer = getActiveModalContainer(tTab, doc);
-          dateInput = findDateFromInput(modalContainer);
-        }
         if (!dateInput) continue;
         targetDoc = doc;
         amtInput = findAmountInToInput(modalContainer);
         typeSelect = findTypeSelect(modalContainer);
-        searchBtn = findSearchButtonForInput(dateInput || typeSelect, doc);
+        searchBtn = findSearchButton(modalContainer, dateInput || typeSelect);
         break;
       }
 
@@ -661,7 +695,7 @@
 
         setTimeout(() => {
           let freshDoc = getFrames()[0];
-          let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
+          let freshModal = getActiveModalContainer(tTab, freshDoc);
           let blankCheck = hasBlankInResults(freshModal);
           let blankFound = blankCheck.found;
           let blankDate = blankCheck.date;
@@ -673,12 +707,12 @@
             else if (userCurr.includes('HUF')) searchAmt = '-800.01';
             else if (userCurr.includes('USD')) searchAmt = '-2.01';
 
-            let freshTypeSelect = findTypeSelect(freshModal) || findTypeSelect(freshDoc);
-            let freshAmtInput = findAmountInToInput(freshModal) || findAmountInToInput(freshDoc);
-            let freshAmtFromInput = findAmountInFromInput(freshModal) || findAmountInFromInput(freshDoc);
-            let freshDateInput = findDateFromInput(freshModal) || findDateFromInput(freshDoc);
-            let freshDateToInput = findDateToInput(freshModal) || findDateToInput(freshDoc);
-            let freshSearchBtn = findSearchButtonForInput(freshAmtInput || freshTypeSelect, freshDoc);
+            let freshTypeSelect = findTypeSelect(freshModal);
+            let freshAmtInput = findAmountInToInput(freshModal);
+            let freshAmtFromInput = findAmountInFromInput(freshModal);
+            let freshDateInput = findDateFromInput(freshModal);
+            let freshDateToInput = findDateToInput(freshModal);
+            let freshSearchBtn = findSearchButton(freshModal, freshAmtInput || freshTypeSelect);
 
             if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
             if (freshAmtInput) setVal(freshAmtInput, searchAmt);
@@ -716,16 +750,16 @@
                   let dateStr = blankDate ? `|STACK_DATE:${blankDate}` : "";
                   copyToClipboard("TRANS_RESULT:" + resText + dateStr);
                 });
-              }, 4500);
-            }, 800);
+              }, 3000);
+            }, 500);
           } else {
             copyToClipboard("TRANS_RESULT:AUTOMATIC");
           }
-        }, 4500);
+        }, 3000);
 
-      }, 1000);
+      }, 600);
 
-    }, 3500);
+    }, 2000);
   } else {
     copyToClipboard("TRANS_RESULT:NO_TRANSACTIONS_TAB");
   }

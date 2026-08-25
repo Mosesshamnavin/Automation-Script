@@ -62,9 +62,11 @@
   // ── STEP 2: Scan ALL note rows for CC ver, IBAN ver, and Payment/Important notes ──
   function scanAllNotes() {
     let ccVer = false;
+    let ccVer90 = false;
     let ibanVer = false;
     let hasPaymentNotes = false;
     let now = new Date();
+    let cutoff90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     let cutoff180 = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
 
     for (let doc of getFrames()) {
@@ -107,20 +109,23 @@
           let cellLower = cellText.toLowerCase();
           let cellNorm  = cellLower.replace(/[\s_\-\+\*\/]/g, '');
 
-          // CC verified (any row, no date limit)
-          // Matches: "ccver", "cardver", "CC 5375XXXXXXXX2674 ver", etc.
-          if (!ccVer && (
-              cellNorm.includes('ccver') || cellNorm.includes('ccverified') ||
-              cellNorm.includes('cardverified') || cellNorm.includes('cardver') ||
-              /\bcc\s+[\w\*]+\s+ver\b/.test(cellLower))) {
+          // CC verified check (lifetime and within 90 days / 3 months)
+          let isCCVer = cellNorm.includes('ccver') || cellNorm.includes('ccverified') ||
+                        cellNorm.includes('cardverified') || cellNorm.includes('cardver') ||
+                        /\bcc\s+[\w\*]+\s+ver\b/.test(cellLower);
+          if (isCCVer) {
             ccVer = true;
+            let within90 = true;
+            if (dateIdx !== -1 && tr.children.length > dateIdx) {
+              try {
+                let d = new Date(tr.children[dateIdx].textContent.trim().replace('T', ' '));
+                if (!isNaN(d.getTime())) within90 = d >= cutoff90;
+              } catch(e) {}
+            }
+            if (within90) ccVer90 = true;
           }
 
           // IBAN / Account verified — within 180 days only
-          // Matches:
-          // 1) Explicit word 'iban' (e.g. "Iban: HU361... ver", "iban ver")
-          // 2) IBAN format (country code + digits, e.g. "PL20105014901000009125121351 ver", "HU3611... ver")
-          // 3) Account number digits (16-32 digits) followed by ver
           let isIbanOrAcc = cellLower.includes('iban')
             || /\b[a-z]{2}\d{10,32}\b/i.test(cellLower)
             || /\b\d{16,32}\b/.test(cellLower);
@@ -140,15 +145,13 @@
         }
       }
     }
-    return { ccVer: ccVer, ibanVer: ibanVer, hasPaymentNotes: hasPaymentNotes };
+    return { ccVer: ccVer, ccVer90: ccVer90, ibanVer: ibanVer, hasPaymentNotes: hasPaymentNotes };
   }
 
   // ── STEP 3: Assemble and copy result ────────────────────────────────────────
   let text   = getTopNote();
   let lower  = (text || '').toLowerCase();
 
-  // "CC [number] ver" means the CC is already verified — do NOT flag as pending
-  // Only flag as pending if CC number exists WITHOUT a following 'ver'
   let ccNumVerified = /\bcc\s+[\w\*]+\s+ver\b/.test(lower);
   let needsVerifyDocs = /\breq\b/.test(lower)
     || /\brem\b/.test(lower)
@@ -159,11 +162,12 @@
     || lower.includes('verify cc')
     || lower.includes('verify card');
 
-  let flags = { ccVer: false, ibanVer: false, hasPaymentNotes: false };
+  let flags = { ccVer: false, ccVer90: false, ibanVer: false, hasPaymentNotes: false };
   try { flags = scanAllNotes(); } catch(e) {}
 
   let hasReq          = needsVerifyDocs       ? "YES" : "NO";
   let ccVerFlag       = flags.ccVer           ? "YES" : "NO";
+  let ccVer90Flag     = flags.ccVer90         ? "YES" : "NO";
   let ibanVerFlag     = flags.ibanVer         ? "YES" : "NO";
   let paymentNotesFlag = flags.hasPaymentNotes ? "YES" : "NO";
 
@@ -171,6 +175,7 @@
   input.value = "REQ_FOUND:" + hasReq
     + "|TEXT:" + (text ? text.replace(/[\r\n]+/g, ' ') : "NOTES_NOT_FOUND")
     + "|CC_VER:" + ccVerFlag
+    + "|CC_VER_90:" + ccVer90Flag
     + "|IBAN_VER:" + ibanVerFlag
     + "|PAYMENT_NOTES:" + paymentNotesFlag;
   document.body.appendChild(input);

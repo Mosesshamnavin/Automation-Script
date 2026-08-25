@@ -127,6 +127,7 @@ def main():
                 player_brand = data.get("brand", "")
                 player_name = data.get("name", "")
                 saved_wid = data.get("wallet_id", "").strip()
+                saved_operator = data.get("operator", "").strip()
                 w_value = data.get("w_value", "")
                 t_curr = data.get("t_curr", "PLN")
                 id_date = data.get("id_date", "")
@@ -213,10 +214,16 @@ def main():
             ah_part = wallet_id_and_rest.split("|ACCHOLDER:")[1]
             if "|THIRDPARTY:" in ah_part:
                 modal_account_holder = ah_part.split("|THIRDPARTY:")[0].strip()
+            elif "|GB_IBAN:" in ah_part:
+                modal_account_holder = ah_part.split("|GB_IBAN:")[0].strip()
             else:
                 modal_account_holder = ah_part.strip()
         except Exception:
             pass
+
+    is_gb_iban = False
+    if "|GB_IBAN:YES" in wallet_id_and_rest or bool(re.search(r'\bGB\d{2}', verify_raw, re.I)):
+        is_gb_iban = True
 
     # Extract fn, ln, city, op
     fn = ""
@@ -241,8 +248,12 @@ def main():
                     ln = ln.strip()
                     city = city.strip()
 
-    # Cross-check accountHolder vs player name directly in Python
-    if modal_account_holder and (fn or ln or player_name):
+    # Safety guard: PAYSAFECARD, SKRILL, COINSPAID, or null/empty account holder is never third party
+    op_upper = playbison_op.upper() if playbison_op else ""
+    if any(k in op_upper for k in ["PAYSAFECARD", "PAYSAFE", "SKRILL", "COINSPAID"]) or modal_account_holder.lower() in ["", "null", "undefined"]:
+        is_third_party_request = False
+    elif modal_account_holder and (fn or ln or player_name):
+        # Cross-check accountHolder vs player name directly in Python
         import unicodedata
         def _norm(s):
             if not s: return ""
@@ -254,10 +265,21 @@ def main():
         ln_norm = _norm(ln)
         pname_norm = _norm(player_name)
         ah_norm = _norm(modal_account_holder)
-        name_match = (ln_norm and ln_norm in ah_norm) or (fn_norm and fn_norm in ah_norm) or (pname_norm and (pname_norm.split()[-1] in ah_norm or ah_norm in pname_norm))
+
+        fn_words = [w for w in fn_norm.split() if len(w) > 1]
+        ln_words = [w for w in ln_norm.split() if len(w) > 1]
+        pname_words = [w for w in pname_norm.split() if len(w) > 1]
+
+        fn_match = any(w in ah_norm for w in fn_words)
+        ln_match = any(w in ah_norm for w in ln_words)
+        pname_match = any(w in ah_norm for w in pname_words)
+
+        name_match = fn_match or ln_match or pname_match or (ln_norm and ln_norm in ah_norm) or (fn_norm and fn_norm in ah_norm)
         if not name_match:
             is_third_party_request = True
             print(f"[PLAYBISON] ⚠️ THIRD PARTY REQUEST DETECTED: Player '{fn} {ln}' ({player_name}) vs Account Holder '{modal_account_holder}'")
+        else:
+            is_third_party_request = False
 
     # Priority 1: If table scan already grabbed the full hex wallet_id, use it directly!
     if saved_wid and len(saved_wid) > 15 and "..." not in saved_wid and not saved_wid.startswith("NOT_FOUND"):
@@ -607,6 +629,7 @@ def main():
                 mistral_failed = False
                 note_txt = ""          # Top note text (safe default to avoid UnboundLocalError)
                 notes_cc_ver = False   # True if notes tab already has 'cc ver' recorded
+                notes_cc_ver_90 = False # True if CC verified in notes within last 90 days (3 months)
                 notes_iban_ver = False  # True if IBAN verified in notes within last 180 days
                 notes_has_payment_notes = False  # True if payment/important notes exist
                 for i in range(15):
@@ -628,10 +651,12 @@ def main():
                         if "|" in res_part:
                             parts = res_part.split("|")
                             note_txt = parts[1].replace("TEXT:", "") if len(parts) > 1 else ""
-                            # Parse optional |CC_VER:, |IBAN_VER:, and |PAYMENT_NOTES: fields
+                            # Parse optional |CC_VER:, |CC_VER_90:, |IBAN_VER:, and |PAYMENT_NOTES: fields
                             for p in parts[2:]:
                                 if p.startswith("CC_VER:"):
                                     notes_cc_ver = p.replace("CC_VER:", "").strip() == "YES"
+                                elif p.startswith("CC_VER_90:"):
+                                    notes_cc_ver_90 = p.replace("CC_VER_90:", "").strip() == "YES"
                                 elif p.startswith("IBAN_VER:"):
                                     notes_iban_ver = p.replace("IBAN_VER:", "").strip() == "YES"
                                 elif p.startswith("PAYMENT_NOTES:"):
@@ -751,7 +776,7 @@ def main():
                 
                 print("[PLAYBISON] Waiting for transactions check & multi-page stack pagination...")
                 trans_result = ""
-                for _ in range(35):
+                for _ in range(90):
                     pyautogui.hotkey('ctrl', 'c')
                     time.sleep(1.0)
                     clip_val = pyperclip.paste().strip()
@@ -765,6 +790,7 @@ def main():
 
                         if trans_result in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
                             print(f"[PLAYBISON] No stack found ({trans_result}). Continuing flow automatically...")
+                            break
                         elif trans_result.startswith("EXCEEDS_5_PAGES"):
                             dates_str = trans_result.split("|")[1] if "|" in trans_result else ""
                             print(f"\n{'='*60}\n[PLAYBISON] ⚠️ OVER 5 PAGES OF TRANSACTIONS FOUND!\nFound Stack Dates on Page 1: {dates_str}\n{'='*60}\n")
@@ -950,22 +976,9 @@ def main():
                             
                             if stack_date:
                                 stack_date_ymd = stack_date.split("T")[0] if "T" in stack_date else stack_date.split(" ")[0]
-                                print(f"[PLAYBISON] Stack Date: {stack_date_ymd}. Navigating to Bonuses tab to extract Bonus Name...")
+                                print(f"[PLAYBISON] Stack Date: {stack_date_ymd}. Switching to Bonuses tab to extract Bonus Name...")
                                 
-                                # ── Phase 1: Navigate current tab to BASE wallet URL ──────────
-                                wallet_base_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
-                                pyautogui.hotkey('ctrl', 'l')
-                                time.sleep(0.4)
-                                pyperclip.copy(wallet_base_url)
-                                pyautogui.hotkey('ctrl', 'a')
-                                time.sleep(0.1)
-                                pyautogui.hotkey('ctrl', 'v')
-                                time.sleep(0.2)
-                                pyautogui.press('enter')
-                                print("[PLAYBISON] Waiting 5 seconds for wallet page to reload...")
-                                time.sleep(5.0)
-
-                                # ── Phase 2: Click the Bonuses tab ───────────
+                                # ── Phase 1: Click the Bonuses tab directly ───────────
                                 js_open_bonuses = load_macro("ds_open_bonuses.js")
                                 pyperclip.copy(js_open_bonuses)
                                 pyautogui.hotkey('ctrl', 'l')
@@ -975,10 +988,10 @@ def main():
                                 pyautogui.hotkey('ctrl', 'v')
                                 time.sleep(0.3)
                                 pyautogui.press('enter')
-                                print("[PLAYBISON] Bonuses tab clicked. Waiting 5 seconds for data to load...")
-                                time.sleep(5.0)
+                                print("[PLAYBISON] Bonuses tab clicked. Waiting 4 seconds for bonus tables to load...")
+                                time.sleep(4.0)
 
-                                # ── Phase 3: Inject scan-only macro ──────────────────────────
+                                # ── Phase 2: Inject scan-only macro ──────────────────────────
                                 js_bonus = load_macro("ds_extract_bonus.js", STACK_DATE=stack_date)
 
                                 pyperclip.copy("__WAITING_BONUS__")
@@ -1000,7 +1013,13 @@ def main():
                                     clip_val = pyperclip.paste().strip()
                                     if clip_val.startswith("BONUS_RESULT:"):
                                         bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
+                                        pyautogui.press('enter')
                                         break
+                                    elif clip_val and not clip_val.startswith("__WAITING") and not clip_val.startswith("javascript") and not clip_val.startswith("DEP_OP"):
+                                        if any(k in clip_val for k in ["AFF_", "Treasure", "VIP_", "NDB", "BONUS", "FB", "FS", "Reload", "Free"]):
+                                            bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
+                                            pyautogui.press('enter')
+                                            break
                                 
                                 if bonus_name and not bonus_name.startswith("NOT_FOUND") and bonus_name != "":
                                     print(f"[PLAYBISON] ✅ Found Bonus Name: {bonus_name}")
@@ -1024,8 +1043,8 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Switched to Payment Log, selected Pending/Completed, and clicked Search.")
                 
-                print("[PLAYBISON] Waiting 3 seconds for search results to load...")
-                time.sleep(3.0)
+                print("[PLAYBISON] Waiting 5.5 seconds for search results to load...")
+                time.sleep(5.5)
                 
                 # Extract the last deposit ID from the Payment Log
                 js_get_last_deposit = load_macro("ds_get_last_deposit.js")
@@ -1039,7 +1058,7 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 
-                time.sleep(1.5)
+                time.sleep(2.0)
                 payment_log_val = pyperclip.paste().strip()
                 last_deposit_op = "NOT_FOUND"
                 withdrawal_op = playbison_op
@@ -1077,9 +1096,16 @@ def main():
                     else:
                         last_deposit_op = dep_part
                 
-                # Final fallback: if withdrawal_op is still empty/NOT_FOUND, use playbison_op from modal
-                if not withdrawal_op or withdrawal_op in ["NOT_FOUND", "NO MATCHES FOUND"]:
-                    withdrawal_op = playbison_op if playbison_op else "NOT_FOUND"
+                # Final fallback: if withdrawal_op is still empty/NOT_FOUND, use playbison_op or saved_operator
+                if not withdrawal_op or withdrawal_op in ["NOT_FOUND", "NO MATCHES FOUND", ""]:
+                    if playbison_op and playbison_op not in ["NOT_FOUND", "NO MATCHES FOUND", ""]:
+                        withdrawal_op = playbison_op
+                    elif saved_operator and saved_operator not in ["NOT_FOUND", "NO MATCHES FOUND", ""]:
+                        withdrawal_op = "BANK WITHDRAWAL PIQ" if saved_operator.startswith("BANK WI") else saved_operator
+                    else:
+                        withdrawal_op = "NOT_FOUND"
+                elif withdrawal_op.startswith("BANK WI"):
+                    withdrawal_op = "BANK WITHDRAWAL PIQ"
                 
                 print(f"[PLAYBISON] Extracted Last Deposit Operator: {last_deposit_op} | Withdrawal Operator: {withdrawal_op}")
                 
@@ -1179,6 +1205,11 @@ def main():
                         print(f"[PLAYBISON] Setting approval status to 'Third party request' (Account Holder mismatch: '{modal_account_holder}').")
                         approval_status = "Third party request"
 
+                    # GB IBAN check: if the IBAN starts with GB, reject the ID
+                    if is_gb_iban:
+                        print(f"[PLAYBISON] GB IBAN detected in maskedAccount/IBAN. Setting approval status to 'Reject'.")
+                        approval_status = "Reject"
+
                         
                     # Check deposit operator vs withdrawal operator rules:
                     # If last deposit operator is Skrill, Paysafecard, or Coinspaid,
@@ -1200,6 +1231,17 @@ def main():
                         if req_keyword not in with_norm:
                             print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
                             approval_status = "Cancel (Mismatch Operator)"
+                    
+                    # Paysafecard withdrawal rule:
+                    # If withdrawal operator is Paysafecard, check notes within 3 months (90 days) for CC verification.
+                    # If CC is not verified in notes within 3 months, status MUST be 'Verify docs'.
+                    if "PAYSAFECARD" in with_norm or "PAYSAFE" in with_norm:
+                        if not notes_cc_ver_90:
+                            print(f"[PLAYBISON] Paysafecard withdrawal detected and NO CC verification found within 3 months (90 days). Setting status to 'Verify docs'.")
+                            if approval_status not in ["Cancel (Mismatch Operator)", "Third party request", "Reject"]:
+                                approval_status = "Verify docs"
+                        else:
+                            print(f"[PLAYBISON] Paysafecard withdrawal detected and CC is verified within 3 months.")
                     
                     # Credit Card last deposit — smart 3-rule logic:
                     # Rule 1: If 'cc ver' detected in Notes tab OR Payment Log and NO active doc request → CC already verified → Approve
