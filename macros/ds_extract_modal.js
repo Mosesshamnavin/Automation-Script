@@ -136,24 +136,37 @@
       let fnNorm = normStr(fn);
       let lnNorm = normStr(ln);
       let ahNorm = normStr(accountHolder);
-      let reqNorm = normStr(reqStr);
+
+      let isNoHolderOp = op.includes('PAYSAFECARD') || op.includes('PAYSAFE') || op.includes('SKRILL') || op.includes('COINSPAID');
+      let hasValidAccountHolder = accountHolder &&
+        accountHolder.toLowerCase() !== 'null' &&
+        accountHolder.toLowerCase() !== 'undefined' &&
+        accountHolder.trim() !== '';
+
+      let fnWords = fnNorm.split(/\s+/).filter(w => w.length > 1);
+      let lnWords = lnNorm.split(/\s+/).filter(w => w.length > 1);
 
       let isThirdParty = false;
-      if (accountHolder) {
-        let nameMatch = (lnNorm && ahNorm.includes(lnNorm)) || (fnNorm && ahNorm.includes(fnNorm));
-        if (!nameMatch) {
-          isThirdParty = true;
-        }
-      } else if (reqStr && (fnNorm || lnNorm)) {
-        let nameMatch = (!fnNorm || reqNorm.includes(fnNorm)) || (!lnNorm || reqNorm.includes(lnNorm));
+      if (!isNoHolderOp && hasValidAccountHolder) {
+        let fnMatched = fnWords.some(w => ahNorm.includes(w));
+        let lnMatched = lnWords.some(w => ahNorm.includes(w));
+        let nameMatch = fnMatched || lnMatched || (lnNorm && ahNorm.includes(lnNorm)) || (fnNorm && ahNorm.includes(fnNorm));
         if (!nameMatch) {
           isThirdParty = true;
         }
       }
 
+      let matchIban = reqStr.match(/["']?iban["']?\s*[:=]\s*["']([^"']+)["']/i);
+      if (!matchIban) matchIban = reqStr.match(/["']?iban["']?\s*[:=]\s*["']?([^,}\r\n]+)/i);
+      let directIban = matchIban ? matchIban[1].replace(/["']/g, '').trim() : '';
+
+      let isGbIban = /\bGB\d{2}[A-Z0-9]+/i.test(acc) || /\bGB\d{2}[A-Z0-9]+/i.test(directIban) || /^GB\d{2}/i.test(acc) || /^GB\d{2}/i.test(directIban);
+      let gbFlag = isGbIban ? "YES" : "NO";
+
+      let cleanAccHolder = hasValidAccountHolder ? accountHolder : '';
       let tpFlag = isThirdParty ? "YES" : "NO";
-      let resPrefix = isThirdParty ? ("NAMEFAIL:" + (accountHolder || (fn + ' ' + ln))) : (acc || 'OK');
-      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + accountHolder + '|THIRDPARTY:' + tpFlag);
+      let resPrefix = isThirdParty ? ("NAMEFAIL:" + (cleanAccHolder || (fn + ' ' + ln))) : (acc || directIban || 'OK');
+      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag);
       return;
     }
 

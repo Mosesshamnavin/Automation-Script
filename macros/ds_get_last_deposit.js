@@ -34,7 +34,8 @@
           if (tr.children.length > Math.max(typeIdx, statusIdx)) {
             let typeVal = tr.children[typeIdx].textContent.trim().toUpperCase();
             let statusVal = tr.children[statusIdx].textContent.trim().toUpperCase();
-            return typeVal === 'DEPOSIT' && statusVal.includes('COMPLETED');
+            return (typeVal === 'DEPOSIT' || typeVal.startsWith('DEP') || typeVal === 'D') &&
+                   (statusVal.includes('COMPLETED') || statusVal.includes('APPROVED') || statusVal.includes('SUCCESS') || statusVal === 'C');
           }
           return false;
         });
@@ -45,7 +46,8 @@
           if (tr.children.length > Math.max(typeIdx, statusIdx, opIdx)) {
             let typeVal = tr.children[typeIdx].textContent.trim().toUpperCase();
             let statusVal = tr.children[statusIdx].textContent.trim().toUpperCase();
-            if (typeVal === 'DEPOSIT' && statusVal.includes('COMPLETED') && opIdx !== -1) {
+            if ((typeVal === 'DEPOSIT' || typeVal.startsWith('DEP') || typeVal === 'D') &&
+                (statusVal.includes('COMPLETED') || statusVal.includes('APPROVED') || statusVal.includes('SUCCESS') || statusVal === 'C') && opIdx !== -1) {
               let opRaw = tr.children[opIdx].textContent.trim().toUpperCase().replace(/[\s_\-]/g, '');
               if (opRaw.includes('CREDITCARD') || opRaw.includes('PAYMENTIQCREDIT') || opRaw.includes('PAYMENTIQ')) {
                 ccDepCount++;
@@ -83,7 +85,7 @@
         let withdrawRow = dataRows.find(tr => {
           if (tr.children.length > typeIdx) {
             let typeVal = tr.children[typeIdx].textContent.trim().toUpperCase();
-            return typeVal === 'WITHDRAW';
+            return typeVal.startsWith('WITHDRAW') || typeVal === 'W' || typeVal.includes('PAYOUT');
           }
           return false;
         });

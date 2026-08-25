@@ -109,10 +109,10 @@
             targetSelect.dispatchEvent(new Event('input', { bubbles: true }));
           }
         }
-        setTimeout(() => doScopedSearch(targetSelect || sLabel), 800);
+        setTimeout(() => doScopedSearch(targetSelect || sLabel), 300);
       } else {
-        setTimeout(() => doScopedSearch(null), 800);
+        setTimeout(() => doScopedSearch(null), 300);
       }
-    }, 3500);
+    }, 1200);
   }
 })();

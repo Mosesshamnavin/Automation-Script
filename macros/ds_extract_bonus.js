@@ -31,6 +31,8 @@
       ta.focus();
       ta.select();
       try { document.execCommand('copy'); } catch(e){}
+      try { navigator.clipboard.writeText(text); } catch(e){}
+      try { prompt('BONUS_RESULT:', text); } catch(e){}
     } catch (e) {}
   }
 
@@ -98,10 +100,10 @@
       let cells = Array.from(tr.children);
       for (let i = 0; i < cells.length; i++) {
         let txt = cells[i].textContent.toLowerCase().trim();
-        if (txt === 'bonus name') nameIdx = i;
-        if (txt === 'bonus code') codeIdx = i;
-        if (txt.includes('application date')) appDateIdx = i;
-        if (txt.includes('enqueue date')) enqDateIdx = i;
+        if (txt === 'bonus name' || txt.includes('bonus name') || (txt.includes('name') && !txt.includes('operator'))) nameIdx = i;
+        if (txt === 'bonus code' || txt.includes('code')) codeIdx = i;
+        if (txt.includes('application date') || txt.includes('app date') || txt.includes('apply date')) appDateIdx = i;
+        if (txt.includes('enqueue date') || txt.includes('created') || (txt.includes('date') && enqDateIdx === -1)) enqDateIdx = i;
       }
       if (nameIdx !== -1 && (appDateIdx !== -1 || enqDateIdx !== -1)) break;
     }
@@ -113,48 +115,45 @@
       enqDateIdx = 5;
     }
 
-    let maxIdx = Math.max(nameIdx, codeIdx, appDateIdx, enqDateIdx);
-    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > maxIdx);
+    let dTarget = new Date(targetDateYMD);
+    let targetDay = !isNaN(dTarget.getTime()) ? dTarget.toISOString().split('T')[0] : targetDateYMD;
+    let prevDay = !isNaN(dTarget.getTime()) ? new Date(dTarget.getTime() - 86400000).toISOString().split('T')[0] : '';
+    let nextDay = !isNaN(dTarget.getTime()) ? new Date(dTarget.getTime() + 86400000).toISOString().split('T')[0] : '';
 
-    let dateMatchWithBonusName = null;
-    let dateMatchWithCodeOnly = null;
+    let dataRows = allTrs.filter(tr => tr.querySelector('td'));
 
     for (let tr of dataRows) {
       let bName = (nameIdx !== -1 && tr.children[nameIdx]) ? tr.children[nameIdx].textContent.trim() : '';
       let bCode = (codeIdx !== -1 && tr.children[codeIdx]) ? tr.children[codeIdx].textContent.trim() : '';
 
-      let appDateStr = (appDateIdx !== -1 && tr.children[appDateIdx]) ? tr.children[appDateIdx].textContent.trim() : '';
-      let enqDateStr = (enqDateIdx !== -1 && tr.children[enqDateIdx]) ? tr.children[enqDateIdx].textContent.trim() : '';
-
-      let isDateMatch = (appDateStr && appDateStr.includes(targetDateYMD)) ||
-                        (enqDateStr && enqDateStr.includes(targetDateYMD));
-
-      if (isDateMatch) {
-        if (bName) {
-          // Explicit Bonus Name found on target date — HIGHEST PRIORITY!
-          return { exact: true, name: bName };
-        } else if (bCode && !dateMatchWithCodeOnly) {
-          dateMatchWithCodeOnly = bCode;
-        }
-      }
-
-      // Fallback tracking
-      let eff = bName || bCode;
-      let dateToCheck = appDateStr || enqDateStr;
-      if (eff && dateToCheck) {
-        let rowTime = new Date(dateToCheck.replace(' ', 'T')).getTime();
-        if (!isNaN(rowTime) && !isNaN(targetTime)) {
-          let diff = Math.abs(rowTime - targetTime);
-          if (diff < minDiff) {
-            minDiff = diff;
-            closestBonus = eff;
+      // If bName is still empty or looks like an ID, check all cells for a bonus-like name
+      if (!bName || bName.toLowerCase() === 'null') {
+        for (let cell of tr.children) {
+          let cText = cell.textContent.trim();
+          if (cText && cText.length > 3 && !/^\d+$/.test(cText) && !/^\d{4}-\d{2}/.test(cText) &&
+              (cText.includes('_') || cText.includes('NDB') || cText.includes('BONUS') || cText.includes('AFF') || cText.includes('FB') || cText.includes('FS') || cText.includes('VIP') || cText.includes('Reload') || cText.includes('Deposit') || cText.includes('Free'))) {
+            bName = cText;
+            break;
           }
         }
       }
-    }
 
-    if (dateMatchWithCodeOnly) {
-      return { exact: true, name: dateMatchWithCodeOnly };
+      let rowText = tr.textContent;
+      let isExactDay = (targetDay && rowText.includes(targetDay)) || (targetDateYMD && rowText.includes(targetDateYMD));
+      let isNearDay = (prevDay && rowText.includes(prevDay)) || (nextDay && rowText.includes(nextDay));
+
+      if (isExactDay) {
+        if (bName && bName.toLowerCase() !== 'null') {
+          return { exact: true, name: bName };
+        } else if (bCode && bCode.toLowerCase() !== 'null') {
+          return { exact: true, name: bCode };
+        }
+      }
+
+      let eff = bName || bCode;
+      if (eff && eff.toLowerCase() !== 'null' && (isExactDay || isNearDay)) {
+        if (!closestBonus) closestBonus = eff;
+      }
     }
 
     return { exact: false };
