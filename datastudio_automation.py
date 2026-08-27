@@ -311,6 +311,7 @@ def main():
             ln = p_parts[1] if len(p_parts) > 1 else ""
                 
     approval_status = "PENDING"
+    dup_res = "NO"
     if fn and ln:
         print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
         duplicates_opened = True
@@ -628,9 +629,10 @@ def main():
                 has_doc_req = False
                 mistral_failed = False
                 note_txt = ""          # Top note text (safe default to avoid UnboundLocalError)
+                top_note_date = ""     # Created date of top note
                 notes_cc_ver = False   # True if notes tab already has 'cc ver' recorded
                 notes_cc_ver_90 = False # True if CC verified in notes within last 90 days (3 months)
-                notes_iban_ver = False  # True if IBAN verified in notes within last 180 days
+                notes_iban_ver = False  # True if IBAN verified in notes within last 90 days
                 notes_has_payment_notes = False  # True if payment/important notes exist
                 for i in range(15):
                     pyperclip.copy("WAITING_FOR_NOTES")
@@ -651,9 +653,11 @@ def main():
                         if "|" in res_part:
                             parts = res_part.split("|")
                             note_txt = parts[1].replace("TEXT:", "") if len(parts) > 1 else ""
-                            # Parse optional |CC_VER:, |CC_VER_90:, |IBAN_VER:, and |PAYMENT_NOTES: fields
+                            # Parse optional |TOP_NOTE_DATE:, |CC_VER:, |CC_VER_90:, |IBAN_VER:, and |PAYMENT_NOTES: fields
                             for p in parts[2:]:
-                                if p.startswith("CC_VER:"):
+                                if p.startswith("TOP_NOTE_DATE:"):
+                                    top_note_date = p.replace("TOP_NOTE_DATE:", "").strip()
+                                elif p.startswith("CC_VER:"):
                                     notes_cc_ver = p.replace("CC_VER:", "").strip() == "YES"
                                 elif p.startswith("CC_VER_90:"):
                                     notes_cc_ver_90 = p.replace("CC_VER_90:", "").strip() == "YES"
@@ -664,7 +668,7 @@ def main():
                             if note_txt != "NOTES_NOT_FOUND":
                                 if parts[0] == "YES":
                                     notes_have_req = True
-                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Verify docs: {notes_have_req}, CC verified: {notes_cc_ver}, IBAN verified: {notes_iban_ver}, Payment/Important notes: {notes_has_payment_notes})")
+                                print(f"[PLAYBISON] Checked top note: '{note_txt}' (Date: {top_note_date}, Verify docs: {notes_have_req}, CC verified: {notes_cc_ver}, IBAN verified: {notes_iban_ver}, Payment/Important notes: {notes_has_payment_notes})")
                                 break
                     time.sleep(0.5)
 
@@ -994,7 +998,6 @@ def main():
                                 # ── Phase 2: Inject scan-only macro ──────────────────────────
                                 js_bonus = load_macro("ds_extract_bonus.js", STACK_DATE=stack_date)
 
-                                pyperclip.copy("__WAITING_BONUS__")
                                 pyperclip.copy(js_bonus)
                                 pyautogui.hotkey('ctrl', 'l')
                                 time.sleep(0.3)
@@ -1004,24 +1007,29 @@ def main():
                                 time.sleep(0.3)
                                 pyautogui.press('enter')
                                 
+                                # Clear clipboard immediately so we don't accidentally re-read the JS source code
+                                pyperclip.copy("__WAITING_BONUS__")
+
                                 print("[PLAYBISON] Extracting Bonus Name (scanning up to 15 pages)...")
                                 bonus_name = ""
-                                for _ in range(90):
+                                for _ in range(60):
                                     time.sleep(1.0)
                                     pyautogui.hotkey('ctrl', 'c')
                                     time.sleep(0.2)
                                     clip_val = pyperclip.paste().strip()
                                     if clip_val.startswith("BONUS_RESULT:"):
-                                        bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
+                                        res_val = clip_val.replace("BONUS_RESULT:", "").strip()
+                                        if res_val and not res_val.startswith("(function") and not res_val.startswith("function") and "{" not in res_val:
+                                            bonus_name = res_val
                                         pyautogui.press('enter')
                                         break
-                                    elif clip_val and not clip_val.startswith("__WAITING") and not clip_val.startswith("javascript") and not clip_val.startswith("DEP_OP"):
+                                    elif clip_val and not clip_val.startswith("__WAITING") and not clip_val.startswith("javascript") and not clip_val.startswith("DEP_OP") and not clip_val.startswith("(function") and "{" not in clip_val:
                                         if any(k in clip_val for k in ["AFF_", "Treasure", "VIP_", "NDB", "BONUS", "FB", "FS", "Reload", "Free"]):
                                             bonus_name = clip_val.replace("BONUS_RESULT:", "").strip()
                                             pyautogui.press('enter')
                                             break
                                 
-                                if bonus_name and not bonus_name.startswith("NOT_FOUND") and bonus_name != "":
+                                if bonus_name and not bonus_name.startswith("NOT_FOUND") and not bonus_name.startswith("(function") and len(bonus_name) < 100:
                                     print(f"[PLAYBISON] ✅ Found Bonus Name: {bonus_name}")
                                     trans_result = trans_result + f" | Bonus: {bonus_name}"
                                 else:
@@ -1065,6 +1073,8 @@ def main():
                 has_doc_req = False
                 cc_dep_count = 0      # Number of completed CC deposits in payment log
                 paylog_cc_ver = False  # True if any payment log note row has 'cc ver'
+                dep_date = ""          # Date of last completed deposit
+                prev_with_date = ""    # Date of previous completed withdrawal
                 
                 if payment_log_val.startswith("DEP_OP:"):
                     dep_part = payment_log_val.replace("DEP_OP:", "")
@@ -1077,7 +1087,7 @@ def main():
                             if op_parts[0] != "NOT_FOUND":
                                 withdrawal_op = op_parts[0]
                             doc_rest = op_parts[1] if len(op_parts) > 1 else ""
-                            # Parse |CC_DEP_COUNT: and |CC_VER: from the remainder
+                            # Parse |CC_DEP_COUNT:, |CC_VER:, |DEP_DATE:, |PREV_WITH_DATE:
                             doc_fields = doc_rest.split("|")
                             doc_val = doc_fields[0].strip()
                             if doc_val == "YES":
@@ -1090,6 +1100,10 @@ def main():
                                         pass
                                 elif field.startswith("CC_VER:"):
                                     paylog_cc_ver = field.replace("CC_VER:", "").strip() == "YES"
+                                elif field.startswith("DEP_DATE:"):
+                                    dep_date = field.replace("DEP_DATE:", "").strip()
+                                elif field.startswith("PREV_WITH_DATE:"):
+                                    prev_with_date = field.replace("PREV_WITH_DATE:", "").strip()
                         else:
                             if with_rest != "NOT_FOUND":
                                 withdrawal_op = with_rest
@@ -1206,26 +1220,23 @@ def main():
 
                     # 3. Third Party Request check
                     if is_third_party_request:
-                        print(f"[PLAYBISON] Third Party Request detected (Account Holder mismatch: '{modal_account_holder}') -> 'Third party request'.")
-                        status_list.append("Third party request")
+                        holder_txt = modal_account_holder if modal_account_holder else "Unknown"
+                        print(f"[PLAYBISON] Third Party Request detected (Account Holder mismatch: '{holder_txt}') -> 'Third party request'.")
+                        status_list.append(f"Third party request (Name mismatch: {holder_txt})")
 
-                    # 4. Deposit vs Withdrawal Operator mismatch check
+                    # 4. Deposit vs Withdrawal Operator mismatch check (Two-way check for Skrill, Paysafecard, Coinspaid)
                     dep_norm = last_deposit_op.upper().replace(" ", "").replace("_", "").replace("-", "") if last_deposit_op else ""
                     with_norm = withdrawal_op.upper().replace(" ", "").replace("_", "").replace("-", "") if withdrawal_op else ""
                     
-                    restricted_dep = None
-                    if "SKRILL" in dep_norm:
-                        restricted_dep = "SKRILL"
-                    elif "PAYSAFECARD" in dep_norm or "PAYSAFE" in dep_norm:
-                        restricted_dep = "PAYSAFECARD"
-                    elif "COINSPAID" in dep_norm:
-                        restricted_dep = "COINSPAID"
-                    
-                    if restricted_dep:
-                        req_keyword = "PAYSAFE" if restricted_dep == "PAYSAFECARD" else restricted_dep
-                        if req_keyword not in with_norm:
-                            print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
-                            status_list.append("Cancel (Mismatch Operator)")
+                    restricted_ops = ["SKRILL", "PAYSAFECARD", "COINSPAID"]
+                    for rop in restricted_ops:
+                        req_kw = "PAYSAFE" if rop == "PAYSAFECARD" else rop
+                        in_dep = req_kw in dep_norm
+                        in_with = req_kw in with_norm
+                        if in_dep != in_with:
+                            print(f"[PLAYBISON] Operator Mismatch Detected! Deposit: '{last_deposit_op}' vs Withdrawal: '{withdrawal_op}' (Rule: {rop} must match on both sides).")
+                            status_list.append(f"Cancel (Mismatch Operator: {last_deposit_op} vs {withdrawal_op})")
+                            break
 
                     # 5. Duplicates & Mistral checks
                     if dup_res == "YES":
@@ -1244,15 +1255,15 @@ def main():
                     needs_verify_docs = False
                     if notes_have_req or has_doc_req:
                         needs_verify_docs = True
+                        status_list.append("Verify docs (Active doc request)")
                     elif is_paysafe_withdrawal and not notes_cc_ver_90:
                         print(f"[PLAYBISON] Paysafecard withdrawal detected and NO CC verification found within 3 months (90 days) -> 'Verify docs'.")
                         needs_verify_docs = True
+                        status_list.append("Verify docs (Paysafecard / No 3M CC ver)")
                     elif is_cc_dep and not cc_already_verified and cc_dep_count <= 1 and not notes_have_req:
                         print(f"[PLAYBISON] First-time CC deposit without verification in notes -> 'Verify docs'.")
                         needs_verify_docs = True
-
-                    if needs_verify_docs:
-                        status_list.append("Verify docs")
+                        status_list.append("Verify docs (First-time CC deposit)")
 
                     # 7. Data Studio / Ratio checks
                     EXEMPT_DEP_KEYWORDS = [
@@ -1271,9 +1282,34 @@ def main():
                             if notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower() and "rem" not in note_txt.lower()):
                                 pass
                             elif notes_has_payment_notes:
-                                status_list.append("Req last deposit")
+                                status_list.append("Req last deposit (No Data Studio / Unverified Notes)")
                     elif ratio_val is not None and ratio_val >= 25.0 and not is_exempt_dep:
-                        status_list.append("W/D Ratio >= 25%")
+                        # If operator is not Paysafecard, Skrill, or Coinspaid -> Req last deposit
+                        if not any(k in dep_norm for k in ["PAYSAFECARD", "PAYSAFE", "SKRILL", "COINSPAID"]):
+                            print(f"[PLAYBISON] W/D Ratio >= 25% ({ratio_str}) for card/bank operator -> 'Req last deposit'.")
+                            status_list.append(f"Req last deposit (W/D Ratio >= 25%: {ratio_str})")
+                        else:
+                            status_list.append(f"W/D Ratio >= 25% ({ratio_str})")
+
+                    # Previous Year Payment / Withdrawal Check (if last deposit or previous withdrawal was in previous calendar year)
+                    curr_year = datetime.datetime.now().year
+                    prev_year_reason = None
+                    if dep_date:
+                        m_year = re.search(r'\b(20\d\d)\b', dep_date)
+                        if m_year:
+                            d_year = int(m_year.group(1))
+                            if d_year < curr_year:
+                                prev_year_reason = f"Last deposit in previous year: {d_year}"
+                    if not prev_year_reason and prev_with_date:
+                        m_year = re.search(r'\b(20\d\d)\b', prev_with_date)
+                        if m_year:
+                            w_year = int(m_year.group(1))
+                            if w_year < curr_year:
+                                prev_year_reason = f"Last withdrawal in previous year: {w_year}"
+
+                    if prev_year_reason:
+                        print(f"[PLAYBISON] Previous year payment detected ({prev_year_reason}) -> 'Req last deposit'.")
+                        status_list.append(f"Req last deposit ({prev_year_reason})")
 
                     # 8. Amount > 2000 PLN Req IBAN check
                     curr_upper = t_curr.strip().upper() if t_curr else "PLN"
@@ -1297,14 +1333,30 @@ def main():
                         if w_value_display and "PLN" not in w_value_display.upper():
                             w_value_display = f"{w_value_display} PLN"
 
+                    # 8. Amount > 2000 PLN Req IBAN check
                     if val_in_pln > 2000.0 and not notes_iban_ver:
-                        print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN (IBAN unverified within 180 days) -> 'Req IBAN'.")
-                        status_list.append("Req IBAN")
+                        print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN (IBAN unverified within 90 days) -> 'Req IBAN'.")
+                        status_list.append(f"Req IBAN (> 2000 PLN: {w_value_display})")
 
-                    # 9. Top note 'Limit reached' check
+                    # 9. Top note 'Limit reached' check (Daily limit refreshes each date)
                     if "limit reached" in (note_txt or "").lower():
-                        print(f"[PLAYBISON] 'Limit reached' detected in top note: '{note_txt}' -> 'Limit Reached'.")
-                        status_list.append("Limit Reached")
+                        is_same_day = False
+                        if top_note_date:
+                            m_note = re.search(r'\b(20\d\d-\d\d-\d\d)\b', top_note_date)
+                            m_w = re.search(r'\b(20\d\d-\d\d-\d\d)\b', id_date or "")
+                            today_ymd = datetime.datetime.now().strftime("%Y-%m-%d")
+                            note_ymd = m_note.group(1) if m_note else ""
+                            w_ymd = m_w.group(1) if m_w else today_ymd
+                            if note_ymd and (note_ymd == w_ymd or note_ymd == today_ymd):
+                                is_same_day = True
+                        else:
+                            is_same_day = True
+
+                        if is_same_day:
+                            print(f"[PLAYBISON] 'Limit reached' detected on same date ({top_note_date}) in note: '{note_txt}' -> 'Limit Reached'.")
+                            status_list.append("Limit Reached")
+                        else:
+                            print(f"[PLAYBISON] 'Limit reached' in note '{note_txt}' is from previous date ({top_note_date}) - daily limit refreshed!")
 
                     # Deduplicate while preserving order
                     unique_statuses = []
@@ -1315,7 +1367,33 @@ def main():
                     if unique_statuses:
                         approval_status = " / ".join(unique_statuses)
                     else:
-                        approval_status = "Approve"
+                        # Determine detailed reason(s) for approval
+                        approve_reasons = []
+                        if is_exempt_dep:
+                            approve_reasons.append(f"Exempt: {last_deposit_op}")
+                        elif is_no_data:
+                            if notes_cc_ver or notes_iban_ver or paylog_cc_ver:
+                                approve_reasons.append("Notes Verified")
+                            else:
+                                approve_reasons.append("New Account")
+                        elif ratio_val is not None and ratio_val < 25.0:
+                            approve_reasons.append(f"Ratio {ratio_str}")
+                        
+                        if is_cc_dep and cc_already_verified:
+                            approve_reasons.append("CC Verified")
+                        if notes_iban_ver:
+                            approve_reasons.append("IBAN Verified")
+
+                        # Deduplicate reasons
+                        unique_reasons = []
+                        for r in approve_reasons:
+                            if r not in unique_reasons:
+                                unique_reasons.append(r)
+
+                        if unique_reasons:
+                            approval_status = f"Approve ({', '.join(unique_reasons)})"
+                        else:
+                            approval_status = "Approve"
                         
                     name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
                     withdrawal_id = player_id
