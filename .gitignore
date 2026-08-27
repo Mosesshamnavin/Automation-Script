@@ -1,3 +1,4 @@
 __pycache__/
 *.pyc
 last_user.json
+completed_ids.json
