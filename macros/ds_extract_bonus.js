@@ -153,6 +153,8 @@
       let eff = bName || bCode;
       if (eff && eff.toLowerCase() !== 'null' && (isExactDay || isNearDay)) {
         if (!closestBonus) closestBonus = eff;
+      } else if (eff && eff.toLowerCase() !== 'null' && !closestBonus) {
+        closestBonus = eff;
       }
     }
 
@@ -188,9 +190,22 @@
   const MAX_PAGES = 15;
 
   function finishScan() {
-    if (closestBonus) {
+    if (closestBonus && closestBonus.toLowerCase() !== 'null') {
       copyToClipboard("BONUS_RESULT:" + closestBonus);
     } else {
+      let allTbls = getAllBonusTables();
+      for (let item of allTbls) {
+        let trs = Array.from(item.tbl.querySelectorAll('tr')).filter(r => r.querySelector('td'));
+        if (trs.length > 0) {
+          for (let cell of trs[0].children) {
+            let txt = cell.textContent.trim();
+            if (txt && txt.length > 3 && !/^\d+$/.test(txt) && !/^\d{4}-\d{2}/.test(txt) && (txt.includes('_') || txt.includes('NDB') || txt.includes('BONUS') || txt.includes('AFF') || txt.includes('FB') || txt.includes('FS') || txt.includes('VIP') || txt.includes('Reload') || txt.includes('Deposit') || txt.includes('Free') || txt.includes('Bonus'))) {
+              copyToClipboard("BONUS_RESULT:" + txt);
+              return;
+            }
+          }
+        }
+      }
       copyToClipboard("BONUS_RESULT:NOT_FOUND");
     }
   }

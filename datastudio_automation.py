@@ -1173,45 +1173,10 @@ def main():
                     # Columns A to M separated by Tabs
                     trans_result_clean = trans_result.replace('\r', '').replace('\n', ', ')
                     
-                    approval_status = "Approve"
-                    
-                    if is_no_data:
-                        if notes_have_req or has_doc_req:
-                            print(f"[PLAYBISON] No data in Data Studio, but active document request detected in top note. Setting status to 'Verify docs'.")
-                            approval_status = "Verify docs"
-                        elif notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower() and "rem" not in note_txt.lower()):
-                            print(f"[PLAYBISON] No data in Data Studio, but notes confirm verification. Setting status to 'Approve'.")
-                            approval_status = "Approve"
-                        elif notes_has_payment_notes:
-                            print(f"[PLAYBISON] No data in Data Studio, and unverified payment/important notes exist. Setting status to 'Req last deposit'.")
-                            approval_status = "Req last deposit"
-                        else:
-                            print(f"[PLAYBISON] No data in Data Studio and no payment notes (new account). Setting status to 'Approve'.")
-                            approval_status = "Approve"
-                    elif ratio_val is not None and ratio_val >= 25.0:
-                        approval_status = "W/D Ratio >= 25%"
-                    
-                    if dup_res == "YES":
-                        approval_status = "Review (Duplicates)"
-                    elif mistral_failed:
-                        approval_status = "Review (Mistral Failed)"
-                        
-                    if notes_have_req or has_doc_req:
-                        # Top note has active 'req' or 'rem' keyword, or pending doc exists
-                        approval_status = "Verify docs"
-                    
-                    # Third Party Request check: account holder sending withdrawal request does not match player name
-                    if is_third_party_request:
-                        print(f"[PLAYBISON] Setting approval status to 'Third party request' (Account Holder mismatch: '{modal_account_holder}').")
-                        approval_status = "Third party request"
+                    # === STATUS DETERMINATION LOGIC (MULTI-STATUS SUPPORT) ===
+                    status_list = []
 
-                    # GB IBAN check: if the IBAN starts with GB, reject the ID
-                    if is_gb_iban:
-                        print(f"[PLAYBISON] GB IBAN detected in maskedAccount/IBAN. Setting approval status to 'Reject'.")
-                        approval_status = "Reject"
-
-                    # === STACK VALUE OVER 100 PLN RULE ===
-                    # If stack exists and total stack value > 100 PLN, status is 'Reject'
+                    # 1. Stack value over 100 PLN check
                     if trans_result and trans_result not in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
                         total_stack_pln = 0.0
                         stack_matches = re.findall(r'[-]?(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*\*\s*(\d+)', trans_result_clean)
@@ -1231,14 +1196,20 @@ def main():
                                 pass
                         
                         if total_stack_pln > 100.0:
-                            print(f"[PLAYBISON] Stack value ({total_stack_pln:.2f} PLN) > 100 PLN. Setting approval status to 'Reject'.")
-                            approval_status = "Reject"
+                            print(f"[PLAYBISON] Stack value ({total_stack_pln:.2f} PLN) > 100 PLN -> 'Reject (Stack > 100 PLN)'.")
+                            status_list.append("Reject (Stack > 100 PLN)")
 
-                        
-                    # Check deposit operator vs withdrawal operator rules:
-                    # If last deposit operator is Skrill, Paysafecard, or Coinspaid,
-                    # withdrawal MUST be requested from that exact same operator.
-                    # Otherwise, set approval status to "Cancel (Mismatch Operator)".
+                    # 2. GB IBAN check
+                    if is_gb_iban:
+                        print(f"[PLAYBISON] GB IBAN detected in maskedAccount/IBAN -> 'Reject (GB IBAN)'.")
+                        status_list.append("Reject (GB IBAN)")
+
+                    # 3. Third Party Request check
+                    if is_third_party_request:
+                        print(f"[PLAYBISON] Third Party Request detected (Account Holder mismatch: '{modal_account_holder}') -> 'Third party request'.")
+                        status_list.append("Third party request")
+
+                    # 4. Deposit vs Withdrawal Operator mismatch check
                     dep_norm = last_deposit_op.upper().replace(" ", "").replace("_", "").replace("-", "") if last_deposit_op else ""
                     with_norm = withdrawal_op.upper().replace(" ", "").replace("_", "").replace("-", "") if withdrawal_op else ""
                     
@@ -1254,58 +1225,57 @@ def main():
                         req_keyword = "PAYSAFE" if restricted_dep == "PAYSAFECARD" else restricted_dep
                         if req_keyword not in with_norm:
                             print(f"[PLAYBISON] Operator Mismatch Detected! Last Deposit: '{last_deposit_op}' ({restricted_dep}) vs Withdrawal: '{withdrawal_op}'")
-                            approval_status = "Cancel (Mismatch Operator)"
-                    
-                    # Paysafecard withdrawal rule:
-                    # If withdrawal operator is Paysafecard, check notes within 3 months (90 days) for CC verification.
-                    # If CC is not verified in notes within 3 months, status MUST be 'Verify docs'.
-                    if "PAYSAFECARD" in with_norm or "PAYSAFE" in with_norm:
-                        if not notes_cc_ver_90:
-                            print(f"[PLAYBISON] Paysafecard withdrawal detected and NO CC verification found within 3 months (90 days). Setting status to 'Verify docs'.")
-                            if approval_status not in ["Cancel (Mismatch Operator)", "Third party request", "Reject"]:
-                                approval_status = "Verify docs"
-                        else:
-                            print(f"[PLAYBISON] Paysafecard withdrawal detected and CC is verified within 3 months.")
-                    
-                    # Credit Card last deposit — smart 3-rule logic:
-                    # Rule 1: If 'cc ver' detected in Notes tab OR Payment Log and NO active doc request → CC already verified → Approve
-                    # Rule 2: First-time CC user (only 1 CC deposit) with no 'cc ver' → Verify docs
-                    # Rule 3: Repeat CC user (2+ CC deposits) → W/D ratio applies normally → Approve
+                            status_list.append("Cancel (Mismatch Operator)")
+
+                    # 5. Duplicates & Mistral checks
+                    if dup_res == "YES":
+                        status_list.append("Review (Duplicates)")
+                    if mistral_failed:
+                        status_list.append("Review (Mistral Failed)")
+
+                    # 6. Verify docs checks:
+                    # a) Top note has active 'req' / 'rem' or pending doc
+                    # b) Paysafecard withdrawal without CC verified in notes within 3 months (90 days)
+                    # c) First-time CC deposit with no 'cc ver' in notes/payment log
                     cc_already_verified = notes_cc_ver or paylog_cc_ver
                     is_cc_dep = "CREDITCARD" in dep_norm or "CREDIT" in dep_norm or "PAYMENTIQCREDITCARD" in dep_norm
-                    if is_cc_dep:
-                        if cc_already_verified and not notes_have_req:
-                            # Rule 1: CC is verified and no active doc request — approve
-                            print(f"[PLAYBISON] Last deposit via Credit Card AND 'cc ver' found in notes/log. CC verified — approving.")
-                            if approval_status in ["W/D Ratio >= 25%", "Verify docs"]:
-                                approval_status = "Approve"
-                        elif cc_dep_count <= 1:
-                            # Rule 2: First-time CC user, no 'cc ver' → must verify
-                            if approval_status not in ["Cancel (Mismatch Operator)", "Review (Duplicates)"]:
-                                print(f"[PLAYBISON] First-time CC deposit (count={cc_dep_count}), no 'cc ver' in notes. Flagging as 'Verify docs'.")
-                                approval_status = "Verify docs"
-                        else:
-                            # Rule 3: Repeat CC user (2+ deposits) — ratio logic applies, don't force Verify docs
-                            print(f"[PLAYBISON] Repeat CC user (count={cc_dep_count}), no 'cc ver'. Ratio logic applies — status: {approval_status}.")
+                    is_paysafe_withdrawal = "PAYSAFECARD" in with_norm or "PAYSAFE" in with_norm
 
-                    
-                    # === EXEMPT PAYMENT METHODS: Bypass W/D Ratio >= 25% requirement ===
-                    # These payment providers always get withdrawal approval regardless of ratio.
+                    needs_verify_docs = False
+                    if notes_have_req or has_doc_req:
+                        needs_verify_docs = True
+                    elif is_paysafe_withdrawal and not notes_cc_ver_90:
+                        print(f"[PLAYBISON] Paysafecard withdrawal detected and NO CC verification found within 3 months (90 days) -> 'Verify docs'.")
+                        needs_verify_docs = True
+                    elif is_cc_dep and not cc_already_verified and cc_dep_count <= 1 and not notes_have_req:
+                        print(f"[PLAYBISON] First-time CC deposit without verification in notes -> 'Verify docs'.")
+                        needs_verify_docs = True
+
+                    if needs_verify_docs:
+                        status_list.append("Verify docs")
+
+                    # 7. Data Studio / Ratio checks
                     EXEMPT_DEP_KEYWORDS = [
-                        "PAYMENTIQCREDITCARD",   # PAYMENTIQ Credit Card
-                        "WEBREDIRECTAPPLEPAY",   # WEBREDIRECT APPLE PAY
-                        "WEBREDIRECTGOOGLEPAY",  # WEBREDIRECT GOOGLE PAY
-                        "WEBREDIRECTBITEXPROAPPLE",  # WEBREDIRECT BITEXPRO APPLE PAY
-                        "WEBREDIRECTBITEXPROGOOGLE", # WEBREDIRECT BITEXPRO GOOGLE PAY
-                        "ARI10GOOGLE",           # ARI10 GOOGLE
-                        "ARI10APPLE",            # ARI10 APPLE
+                        "PAYMENTIQCREDITCARD",
+                        "WEBREDIRECTAPPLEPAY",
+                        "WEBREDIRECTGOOGLEPAY",
+                        "WEBREDIRECTBITEXPROAPPLE",
+                        "WEBREDIRECTBITEXPROGOOGLE",
+                        "ARI10GOOGLE",
+                        "ARI10APPLE",
                     ]
                     is_exempt_dep = any(kw in dep_norm for kw in EXEMPT_DEP_KEYWORDS)
-                    if is_exempt_dep and approval_status == "W/D Ratio >= 25%":
-                        print(f"[PLAYBISON] Last deposit via exempt payment method ('{last_deposit_op}'). W/D ratio check bypassed — proceeding with approval.")
-                        approval_status = "Approve"
-                        
-                    # Convert withdrawal amount to PLN if not already PLN
+
+                    if is_no_data:
+                        if not needs_verify_docs:
+                            if notes_cc_ver or notes_iban_ver or paylog_cc_ver or (note_txt and "ver" in note_txt.lower() and "req" not in note_txt.lower() and "rem" not in note_txt.lower()):
+                                pass
+                            elif notes_has_payment_notes:
+                                status_list.append("Req last deposit")
+                    elif ratio_val is not None and ratio_val >= 25.0 and not is_exempt_dep:
+                        status_list.append("W/D Ratio >= 25%")
+
+                    # 8. Amount > 2000 PLN Req IBAN check
                     curr_upper = t_curr.strip().upper() if t_curr else "PLN"
                     val_in_pln = 0.0
                     if curr_upper and curr_upper != "PLN":
@@ -1326,27 +1296,26 @@ def main():
                             pass
                         if w_value_display and "PLN" not in w_value_display.upper():
                             w_value_display = f"{w_value_display} PLN"
-                    
-                    # If withdrawal amount is over 2000 PLN, set approval status to "Req IBAN"
-                    if val_in_pln > 2000.0:
-                        if approval_status == "Approve":
-                            print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN. Setting approval status to 'Req IBAN'.")
-                            approval_status = "Req IBAN"
-                    
-                    # === IBAN VERIFIED OVERRIDE ===
-                    # If status is 'Req IBAN' but a note within the last 180 days contains
-                    # 'iban ... ver' (e.g. "Iban: HU361... ver"), the IBAN is already verified.
-                    # Downgrade to 'Approve' so the limit check below can apply correctly.
-                    if approval_status == "Req IBAN" and notes_iban_ver:
-                        print(f"[PLAYBISON] IBAN verified within 180 days (detected in notes). Downgrading 'Req IBAN' to 'Approve'.")
-                        approval_status = "Approve"
-                    
-                    # === LIMIT REACHED CHECK (final override) ===
-                    # If the top note contains "limit reached", override whatever status we have.
-                    # Example note: "wd 6175982 sent/Today limit reached"
+
+                    if val_in_pln > 2000.0 and not notes_iban_ver:
+                        print(f"[PLAYBISON] Withdrawal amount ({val_in_pln:.2f} PLN) > 2000 PLN (IBAN unverified within 180 days) -> 'Req IBAN'.")
+                        status_list.append("Req IBAN")
+
+                    # 9. Top note 'Limit reached' check
                     if "limit reached" in (note_txt or "").lower():
-                        print(f"[PLAYBISON] 'Limit reached' detected in top note: '{note_txt}'. Overriding status to 'Limit Reached'.")
-                        approval_status = "Limit Reached"
+                        print(f"[PLAYBISON] 'Limit reached' detected in top note: '{note_txt}' -> 'Limit Reached'.")
+                        status_list.append("Limit Reached")
+
+                    # Deduplicate while preserving order
+                    unique_statuses = []
+                    for s in status_list:
+                        if s not in unique_statuses:
+                            unique_statuses.append(s)
+
+                    if unique_statuses:
+                        approval_status = " / ".join(unique_statuses)
+                    else:
+                        approval_status = "Approve"
                         
                     name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
                     withdrawal_id = player_id

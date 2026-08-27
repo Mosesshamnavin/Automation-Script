@@ -100,7 +100,33 @@
           withOpName = withdrawRow.children[opIdx].textContent.trim();
         }
 
-        depositInfo = { depOp: depOpName, withOp: withOpName, req: hasReq, ccDepCount: ccDepCount, ccVerInLog: ccVerInLog };
+        let dateIdx = headerCells.findIndex(c => {
+          let t = c.textContent.trim().toLowerCase();
+          return t === 'created' || t === 'date' || t === 'created at' || t === 'created date' || t === 'time';
+        });
+
+        let depDate = "";
+        if (depositRow && dateIdx !== -1 && depositRow.children.length > dateIdx) {
+          depDate = depositRow.children[dateIdx].textContent.trim();
+        }
+
+        // --- Find previous completed withdrawal row (prior to current) ---
+        let prevWithRow = dataRows.find(tr => {
+          if (tr !== withdrawRow && tr.children.length > Math.max(typeIdx, statusIdx)) {
+            let typeVal = tr.children[typeIdx].textContent.trim().toUpperCase();
+            let statusVal = tr.children[statusIdx].textContent.trim().toUpperCase();
+            return (typeVal.startsWith('WITHDRAW') || typeVal === 'W' || typeVal.includes('PAYOUT')) &&
+                   (statusVal.includes('COMPLETED') || statusVal.includes('APPROVED') || statusVal.includes('SUCCESS') || statusVal === 'C' || statusVal.includes('SENT'));
+          }
+          return false;
+        });
+
+        let prevWithDate = "";
+        if (prevWithRow && dateIdx !== -1 && prevWithRow.children.length > dateIdx) {
+          prevWithDate = prevWithRow.children[dateIdx].textContent.trim();
+        }
+
+        depositInfo = { depOp: depOpName, withOp: withOpName, req: hasReq, ccDepCount: ccDepCount, ccVerInLog: ccVerInLog, depDate: depDate, prevWithDate: prevWithDate };
         break;
       }
     }
@@ -113,7 +139,9 @@
       + "|WITH_OP:" + depositInfo.withOp
       + "|DOC:" + depositInfo.req
       + "|CC_DEP_COUNT:" + depositInfo.ccDepCount
-      + "|CC_VER:" + depositInfo.ccVerInLog;
+      + "|CC_VER:" + depositInfo.ccVerInLog
+      + "|DEP_DATE:" + depositInfo.depDate
+      + "|PREV_WITH_DATE:" + depositInfo.prevWithDate;
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');
@@ -122,7 +150,7 @@
   }
 
   let input = document.createElement('input');
-  input.value = "DEP_OP:NOT_FOUND|WITH_OP:NOT_FOUND|DOC:NO|CC_DEP_COUNT:0|CC_VER:NO";
+  input.value = "DEP_OP:NOT_FOUND|WITH_OP:NOT_FOUND|DOC:NO|CC_DEP_COUNT:0|CC_VER:NO|DEP_DATE:|PREV_WITH_DATE:";
   document.body.appendChild(input);
   input.select();
   document.execCommand('copy');

@@ -344,20 +344,27 @@
       // If note contains 'automatic', skip it (already verified automatic)
       if (txt.includes('automatic')) continue;
 
-      let inValStr = tr.children.length > 6 ? tr.children[6].textContent.trim() : '0';
-      let inVal = Math.abs(parseFloat(inValStr.replace(',', '.')) || 0);
+      let transValIdx = 4;
+      let inValIdx = 6;
+      let outValIdx = 8;
+      
+      let transVal = tr.children.length > transValIdx ? Math.abs(parseFloat(tr.children[transValIdx].textContent.trim().replace(',', '.')) || 0) : 0;
+      let inVal = tr.children.length > inValIdx ? Math.abs(parseFloat(tr.children[inValIdx].textContent.trim().replace(',', '.')) || 0) : 0;
+      let outVal = tr.children.length > outValIdx ? Math.abs(parseFloat(tr.children[outValIdx].textContent.trim().replace(',', '.')) || 0) : 0;
+      let hasAmount = (transVal > 0) || (inVal > 0) || (outVal > 0);
 
       let balBeforeStr = tr.children.length > balBeforeIdx ? tr.children[balBeforeIdx].textContent.trim() : '0';
       let balAfterStr = tr.children.length > balAfterIdx ? tr.children[balAfterIdx].textContent.trim() : '0';
       let bBefore = parseFloat(balBeforeStr.replace(',', '.')) || 0;
       let bAfter = parseFloat(balAfterStr.replace(',', '.')) || 0;
+      let balChanged = (bBefore !== bAfter);
 
       let bonBefore = tr.children.length > (balAfterIdx + 1) ? (parseFloat(tr.children[balAfterIdx + 1].textContent.trim().replace(',', '.')) || 0) : 0;
       let bonAfter = tr.children.length > (balAfterIdx + 2) ? (parseFloat(tr.children[balAfterIdx + 2].textContent.trim().replace(',', '.')) || 0) : 0;
+      let bonChanged = (bonBefore !== bonAfter) && (bonBefore > 0 || bonAfter > 0);
 
       // Check if this row is an inactive forfeiture/zero-change row where player received 0 funds
-      let isUnchanged = (inVal === 0) && (bBefore === bAfter) && (bonAfter <= bonBefore);
-      if (isUnchanged) {
+      if (!hasAmount && !balChanged && !bonChanged) {
         continue;
       }
 
