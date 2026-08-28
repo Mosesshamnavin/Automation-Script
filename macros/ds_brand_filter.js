@@ -1,4 +1,15 @@
 (function () {
+  function copyVal(val) {
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = val;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch(e){}
+  }
+
   try {
     function simClick(el) {
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
@@ -15,7 +26,7 @@
         e.textContent.trim().toLowerCase() === 'brand' &&
         e.getBoundingClientRect().width > 0
     );
-    if (!brandLabel) { prompt('WD_FILTER:', 'BRAND_LABEL_NOT_FOUND'); return; }
+    if (!brandLabel) { copyVal('BRAND_LABEL_NOT_FOUND'); return; }
 
     simClick(brandLabel);
 
@@ -52,17 +63,17 @@
             }
             setTimeout(() => {
               simClick(document.body);
-              prompt('WD_FILTER:', 'SUCCESS');
+              copyVal('SUCCESS');
             }, 500);
           }, 400);
         } else {
-          prompt('WD_FILTER:', 'ROW_NOT_FOUND');
+          copyVal('ROW_NOT_FOUND');
         }
       } else {
-        prompt('WD_FILTER:', 'BRAND_NOT_FOUND');
+        copyVal('BRAND_NOT_FOUND');
       }
     }, 1500);
   } catch (e) {
-    prompt('WD_FILTER:', 'ERROR: ' + e.message);
+    copyVal('ERROR: ' + e.message);
   }
 })();

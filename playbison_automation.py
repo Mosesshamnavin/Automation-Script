@@ -123,10 +123,6 @@ def main():
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    # Crucial: Clear the clipboard again so main.py doesn't accidentally read the javascript code!
-    time.sleep(0.5)
-    pyperclip.copy("WAITING_FOR_EMAIL")
-    
     print("\n[PLAYBISON] Extraction macro executed successfully.")
 
 if __name__ == "__main__":

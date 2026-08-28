@@ -46,7 +46,7 @@
 
     let now = new Date();
     // Yesterday at 13:30:00
-    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 13, 30, 0);
+    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1 , 13, 30, 0);
 
     return rowDate >= cutoff;
   }
@@ -68,23 +68,53 @@
           try { btn.click(); } catch (e) {}
         }
       }
-      let ths = Array.from(doc.querySelectorAll('th'));
-      let roleTh = ths.find(th => th.textContent.trim().toLowerCase() === 'roles');
-      let loginTh = ths.find(th => th.textContent.trim().toLowerCase() === 'login');
-      let idTh = ths.find(th => th.textContent.trim().toLowerCase() === 'id');
 
-      let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
-      let wValueTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w value' || th.textContent.trim().toLowerCase() === 'value w currency' || th.textContent.trim().toLowerCase() === 't value');
-      let tCurrTh = ths.find(th => th.textContent.trim().toLowerCase() === 'w currency' || th.textContent.trim().toLowerCase() === 't currency');
-      let dateTh = ths.find(th => th.textContent.trim().toLowerCase() === 'date');
-      let walletIdTh = ths.find(th => th.textContent.trim().toLowerCase() === 'wallet id' || th.textContent.trim().toLowerCase() === 'wallet_id');
-      let opTh = ths.find(th => th.textContent.trim().toLowerCase() === 'operator' || th.textContent.trim().toLowerCase() === 'operator name');
-      let nameTh = ths.find(th => th.textContent.trim().toLowerCase() === 'name');
+      let tables = Array.from(doc.querySelectorAll('table'));
+      for (let tbl of tables) {
+        let ths = Array.from(tbl.querySelectorAll('th'));
+        if (ths.length === 0) {
+          let firstTr = tbl.querySelector('thead tr, tr');
+          if (firstTr) ths = Array.from(firstTr.querySelectorAll('th, td'));
+        }
+        if (ths.length === 0) continue;
 
-      if (roleTh) {
+        let roleTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'roles' || t === 'role';
+        });
+        let loginTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'login' || t === 'email' || t === 'user' || t === 'player';
+        });
+        let idTh = ths.find(th => th.textContent.trim().toLowerCase() === 'id');
+
+        // MUST be the withdrawals table containing both Roles and Login headers
+        if (!roleTh || !loginTh) continue;
+
         let roleIdx = ths.indexOf(roleTh);
-        let loginIdx = loginTh ? ths.indexOf(loginTh) : -1;
+        let loginIdx = ths.indexOf(loginTh);
         let idIdx = idTh ? ths.indexOf(idTh) : -1;
+
+        let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
+        let wValueTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'w value' || t === 'value w currency' || t === 't value' || t === 'value';
+        });
+        let tCurrTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'w currency' || t === 't currency' || t === 'currency';
+        });
+        let dateTh = ths.find(th => th.textContent.trim().toLowerCase() === 'date' || th.textContent.trim().toLowerCase() === 'created');
+        let walletIdTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'wallet id' || t === 'wallet_id' || t === 'wallet';
+        });
+        let opTh = ths.find(th => {
+          let t = th.textContent.trim().toLowerCase();
+          return t === 'operator' || t === 'operator name' || t === 'payment method';
+        });
+        let nameTh = ths.find(th => th.textContent.trim().toLowerCase() === 'name');
+
         let brandIdx = brandTh ? ths.indexOf(brandTh) : -1;
         let wValueIdx = wValueTh ? ths.indexOf(wValueTh) : -1;
         let tCurrIdx = tCurrTh ? ths.indexOf(tCurrTh) : -1;
@@ -93,7 +123,8 @@
         let opIdx = opTh ? ths.indexOf(opTh) : -1;
         let nameIdx = nameTh ? ths.indexOf(nameTh) : -1;
 
-        let trs = Array.from(doc.querySelectorAll('tbody tr'));
+        let trs = Array.from(tbl.querySelectorAll('tbody tr'));
+        if (trs.length === 0) trs = Array.from(tbl.querySelectorAll('tr')).slice(1);
         if (trs.length === 0) continue;
         
         trs.reverse();
@@ -111,32 +142,37 @@
 
         for (let tr of trs) {
           let idVal = "";
-          if (idIdx !== -1) {
-            let idTd = tr.children[idIdx];
-            if (idTd) idVal = idTd.textContent.trim();
+          if (idIdx !== -1 && tr.children[idIdx]) {
+            idVal = tr.children[idIdx].textContent.trim();
           }
           
           // Skip if we already completed this ID
           if (idVal && window._processedBisonIds.has(idVal)) continue;
 
-          let dateVal = "";
-          if (dateIdx !== -1) {
-            let dateTd = tr.children[dateIdx];
-            if (dateTd) {
-              dateVal = (dateTd.textContent || '').replace(/\s+/g, ' ').trim();
-              dateVal = dateVal.replace(/[+-]\d{2}:\d{2}$/, '').trim();
+          // Extract and validate email from Login column using regex
+          let emailVal = "";
+          if (loginIdx !== -1 && tr.children[loginIdx]) {
+            let rawLogin = tr.children[loginIdx].textContent || "";
+            let emailMatch = rawLogin.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (emailMatch) {
+              emailVal = emailMatch[0].trim().toLowerCase();
             }
+          }
+
+          // If no valid email found in this row, skip it
+          if (!emailVal || !emailVal.includes('@')) {
+            continue;
+          }
+
+          let dateVal = "";
+          if (dateIdx !== -1 && tr.children[dateIdx]) {
+            dateVal = (tr.children[dateIdx].textContent || '').replace(/\s+/g, ' ').trim();
+            dateVal = dateVal.replace(/[+-]\d{2}:\d{2}$/, '').trim();
           }
 
           // Skip records that are older than previous day 13:30
           if (dateVal && !isAfterPreviousDay1330(dateVal)) {
             continue;
-          }
-          
-          let emailVal = "";
-          if (loginIdx !== -1) {
-            let loginTd = tr.children[loginIdx];
-            if (loginTd) emailVal = loginTd.textContent.trim().toLowerCase();
           }
           
           let td = tr.children[roleIdx];
@@ -145,63 +181,58 @@
             foundTarget = true;
             td.style.border = "4px solid red";
             tr.style.backgroundColor = "#ffcccc";
+            foundEmail = emailVal;
             foundDate = dateVal;
-            if (loginIdx !== -1) {
-              let loginTd = tr.children[loginIdx];
-              if (loginTd) foundEmail = loginTd.textContent.trim();
+            if (idIdx !== -1 && tr.children[idIdx]) {
+              foundId = tr.children[idIdx].textContent.trim();
             }
-            if (idIdx !== -1) {
-              let idTd = tr.children[idIdx];
-              if (idTd) foundId = idTd.textContent.trim();
+            if (brandIdx !== -1 && tr.children[brandIdx]) {
+              foundBrand = tr.children[brandIdx].textContent.trim();
             }
-            if (brandIdx !== -1) {
-              let brandTd = tr.children[brandIdx];
-              if (brandTd) foundBrand = brandTd.textContent.trim();
+            if (wValueIdx !== -1 && tr.children[wValueIdx]) {
+              foundWValue = tr.children[wValueIdx].textContent.trim();
             }
-            if (wValueIdx !== -1) {
-              let wValueTd = tr.children[wValueIdx];
-              if (wValueTd) foundWValue = wValueTd.textContent.trim();
-            }
-            if (tCurrIdx !== -1) {
-              let tCurrTd = tr.children[tCurrIdx];
-              if (tCurrTd) foundTCurr = tCurrTd.textContent.trim().toUpperCase();
+            if (tCurrIdx !== -1 && tr.children[tCurrIdx]) {
+              foundTCurr = tr.children[tCurrIdx].textContent.trim().toUpperCase();
             }
 
-            if (walletIdIdx !== -1) {
+            if (walletIdIdx !== -1 && tr.children[walletIdIdx]) {
               let walletIdTd = tr.children[walletIdIdx];
-              if (walletIdTd) {
-                let a = walletIdTd.querySelector('a');
-                let href = a ? (a.getAttribute('href') || a.href || '') : '';
-                let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
-                let qtip = walletIdTd.getAttribute('data-qtip') || walletIdTd.getAttribute('title') || (a ? (a.getAttribute('data-qtip') || a.getAttribute('title')) : '');
-                if (hrefMatch && hrefMatch[1]) {
-                  foundWalletId = hrefMatch[1].trim();
-                } else if (qtip && qtip.match(/^[a-f0-9]{15,}$/i)) {
-                  foundWalletId = qtip.trim();
-                } else {
-                  let fullVal = walletIdTd.getAttribute('title') || (a ? a.getAttribute('title') : '') || walletIdTd.getAttribute('data-original-title') || walletIdTd.getAttribute('data-value');
-                  foundWalletId = (fullVal && fullVal.length > 5) ? fullVal.trim() : walletIdTd.textContent.trim();
-                }
+              let a = walletIdTd.querySelector('a');
+              let href = a ? (a.getAttribute('href') || a.href || '') : '';
+              let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
+              let qtip = walletIdTd.getAttribute('data-qtip') || walletIdTd.getAttribute('title') || (a ? (a.getAttribute('data-qtip') || a.getAttribute('title')) : '');
+              if (hrefMatch && hrefMatch[1]) {
+                foundWalletId = hrefMatch[1].trim();
+              } else if (qtip && qtip.match(/^[a-f0-9]{15,}$/i)) {
+                foundWalletId = qtip.trim();
+              } else {
+                let fullVal = walletIdTd.getAttribute('title') || (a ? a.getAttribute('title') : '') || walletIdTd.getAttribute('data-original-title') || walletIdTd.getAttribute('data-value');
+                foundWalletId = (fullVal && fullVal.length > 5) ? fullVal.trim() : walletIdTd.textContent.trim();
               }
             }
-            if (opIdx !== -1) {
-              let opTd = tr.children[opIdx];
-              if (opTd) foundOperator = opTd.textContent.trim();
+            if (opIdx !== -1 && tr.children[opIdx]) {
+              foundOperator = tr.children[opIdx].textContent.trim();
             }
-            if (nameIdx !== -1) {
-              let nameTd = tr.children[nameIdx];
-              if (nameTd) foundName = nameTd.textContent.trim();
+            if (nameIdx !== -1 && tr.children[nameIdx]) {
+              foundName = tr.children[nameIdx].textContent.trim();
             }
             break;
           }
         }
 
-        if (foundTarget) {
-          if (foundEmail) {
-            prompt("Non-VIP Role Found! Press Ctrl+C to copy (Email|ID|Brand|WValue|TCurr|IDDate|WalletId|Operator|Name):", foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate + "|" + foundWalletId + "|" + foundOperator + "|" + foundName);
-          } else {
-            alert("Found a non-VIP Role, but couldn't find the email in the login column.");
-          }
+        if (foundTarget && foundEmail) {
+          let payload = foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate + "|" + foundWalletId + "|" + foundOperator + "|" + foundName;
+          
+          // Direct clipboard write - never blocks the browser thread with modal dialogs
+          try {
+            let ta = document.createElement('textarea');
+            ta.value = payload;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch(e){}
           return;
         }
 

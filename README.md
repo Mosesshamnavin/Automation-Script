@@ -11,12 +11,28 @@ A hybrid Python + JavaScript automation suite designed to streamline manual user
 
 ## Getting Started
 
-1. **Prepare Browser:** Open Google Chrome and navigate to the **Playbison Admin Dashboard** (`Withdrawals To Confirm` page).
-2. **Start Script:** Open your terminal and run:
-   ```bash
-   python main.py
-   ```
-3. **Hands Off:** Once started, do not touch your mouse or keyboard. The script will physically simulate keyboard shortcuts (like opening tabs) and use clipboard bridging.
+### 1. Requirements & Installation
+Make sure **Python 3.8+** and **Google Chrome** are installed.
+
+Install the required Python packages by opening your terminal in the project folder and running:
+```bash
+pip install -r requirements.txt
+```
+*(Or manually: `pip install pyautogui pyperclip requests`)*
+
+### 2. Browser Setup (Before Starting)
+1. Open **Google Chrome** (maximize the window).
+2. Ensure you are already logged in to:
+   - **Playbison Back Office** (`api-acnt.playbison.com`) — navigate to **Payments & Frauds -> Withdrawals To Confirm** on Tab 1.
+   - **Google Account** (for Data Studio & Google Sheets).
+   - **PaymentIQ Back Office** (`backoffice.paymentiq.io`).
+
+### 3. Run the Script
+Open your terminal and run:
+```bash
+python main.py
+```
+Press **ENTER**, switch to the Google Chrome window within the 5-second countdown, and **do not touch your mouse or keyboard** while the automation is running.
 
 ## Documentation
 - **[View the Complete Workflow Documentation (WORKFLOW.md)](WORKFLOW.md)**: Detailed step-by-step breakdown of exactly what the script checks and validates at each stage.

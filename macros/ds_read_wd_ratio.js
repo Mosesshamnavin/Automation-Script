@@ -1,4 +1,15 @@
 (function () {
+  function copyVal(val) {
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = val;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch(e){}
+  }
+
   try {
     let allEls = Array.from(document.querySelectorAll('*'));
     let isMulti = false;
@@ -20,7 +31,7 @@
       if (emailCells.length > 1) isMulti = true;
     }
 
-    if (isMulti) { prompt('WD_RATIO:', 'MULTIBRAND'); return; }
+    if (isMulti) { copyVal('MULTIBRAND'); return; }
 
     // Try to find a percentage element
     let percentEls = allEls.filter(e => {
@@ -32,7 +43,7 @@
     });
     if (percentEls.length > 0) {
       percentEls.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-      prompt('WD_RATIO:', percentEls[0].textContent.trim());
+      copyVal(percentEls[0].textContent.trim());
       return;
     }
 
@@ -53,13 +64,13 @@
       });
       candidateCells.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
       if (candidateCells.length > 0) {
-        prompt('WD_RATIO:', candidateCells[0].textContent.trim());
+        copyVal(candidateCells[0].textContent.trim());
         return;
       }
     }
 
-    prompt('WD_RATIO:', 'NO_DATA');
+    copyVal('NO_DATA');
   } catch (e) {
-    prompt('WD_RATIO:', 'ERROR: ' + e.message);
+    copyVal('ERROR: ' + e.message);
   }
 })();

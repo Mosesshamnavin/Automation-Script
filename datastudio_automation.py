@@ -448,65 +448,78 @@ def main():
     # Macro 4: Read W/D ratio (volumes) from Data Studio table using robust multi-tier search
     js_macro_4 = load_macro("ds_read_wd_ratio.js")
 
-    pyperclip.copy(js_macro_4)
-    pyautogui.hotkey('ctrl', 'l')
-    time.sleep(0.5)
-    pyautogui.write('javascript:')
-    time.sleep(0.2)
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.5)
-    pyautogui.press('enter')
-    
-    time.sleep(1.5)
-    
-    # Grab prompt response via Ctrl+C
-    pyautogui.hotkey('ctrl', 'c')
-    time.sleep(0.5)
-    ratio_raw = pyperclip.paste().strip()
-    pyautogui.press('enter') # Close prompt
-    
-    print(f"\n[DATASTUDIO] Raw W/D ratio text: '{ratio_raw}'")
+    # Retry loop: if page hasn't loaded yet (NO_DATA), retry up to 3 times
+    MAX_RATIO_RETRIES = 3
+    ratio_raw = ""
+    for ratio_attempt in range(1, MAX_RATIO_RETRIES + 1):
+        pyperclip.copy("WAITING_RATIO")
+        pyperclip.copy(js_macro_4)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        time.sleep(1.5)
+        ratio_raw = pyperclip.paste().strip()
+        if ratio_raw.startswith("(function") or ratio_raw == "WAITING_RATIO":
+            time.sleep(1.0)
+            ratio_raw = pyperclip.paste().strip()
+        
+        print(f"\n[DATASTUDIO] Raw W/D ratio text: '{ratio_raw}' (attempt {ratio_attempt}/{MAX_RATIO_RETRIES})")
+        
+        # If we got actual data (not NO_DATA and not JS code), break out of retry loop
+        raw_check = ratio_raw.upper()
+        if "NO_DATA" not in raw_check and "NO DATA" not in raw_check and not ratio_raw.startswith("(function"):
+            break
+        
+        # NO_DATA -> page might still be loading, retry after waiting
+        if ratio_attempt < MAX_RATIO_RETRIES:
+            print(f"[DATASTUDIO] Page may still be loading. Waiting 5 seconds before retry...")
+            time.sleep(5)
+        else:
+            print(f"[DATASTUDIO] Still NO_DATA after {MAX_RATIO_RETRIES} attempts. Treating as new account (0%).")
 
     if ratio_raw == "MULTIBRAND":
         print(f"[DATASTUDIO] Multibrand (2+ rows) detected. Selecting '{player_brand}' in Brand filter...")
         js_macro_brand = load_macro("ds_brand_filter.js", TARGET_BRAND=player_brand)
         
+        pyperclip.copy("WAITING_FILTER")
         pyperclip.copy(js_macro_brand)
         pyautogui.hotkey('ctrl', 'l')
-        time.sleep(0.5)
+        time.sleep(0.3)
         pyautogui.write('javascript:')
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
-        time.sleep(0.5)
+        time.sleep(0.3)
         pyautogui.press('enter')
         
-        time.sleep(3.5)
-        pyautogui.hotkey('ctrl', 'c')
-        time.sleep(0.5)
+        time.sleep(3.0)
         filter_status = pyperclip.paste().strip()
-        pyautogui.press('enter')
         print(f"[DATASTUDIO] Brand filter status: '{filter_status}'")
         
-        if "SUCCESS" in filter_status:
-            print("[DATASTUDIO] Waiting 6 seconds for filtered data to load...")
-            time.sleep(6.0)
-            
-            print(f"[DATASTUDIO] Re-checking W/D ratio for {player_brand.capitalize()}...")
-            pyperclip.copy(js_macro_4)
-            pyautogui.hotkey('ctrl', 'l')
-            time.sleep(0.5)
-            pyautogui.write('javascript:')
-            time.sleep(0.2)
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.5)
-            pyautogui.press('enter')
-            
-            time.sleep(1.5)
-            pyautogui.hotkey('ctrl', 'c')
-            time.sleep(0.5)
+        print("[DATASTUDIO] Waiting 5 seconds for filtered data to load...")
+        time.sleep(5.0)
+        
+        print(f"[DATASTUDIO] Re-checking W/D ratio for {player_brand.capitalize()}...")
+        pyperclip.copy("WAITING_RATIO")
+        pyperclip.copy(js_macro_4)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        time.sleep(1.5)
+        ratio_raw = pyperclip.paste().strip()
+        if ratio_raw.startswith("(function") or ratio_raw == "WAITING_RATIO":
+            time.sleep(1.0)
             ratio_raw = pyperclip.paste().strip()
-            pyautogui.press('enter')
-            print(f"[DATASTUDIO] New Raw W/D ratio text: '{ratio_raw}'")
+        print(f"[DATASTUDIO] New Raw W/D ratio text: '{ratio_raw}'")
     
     # Parse ratio float
     is_no_data = False
@@ -526,6 +539,10 @@ def main():
                     ratio_val = float(match.group())
                 except ValueError:
                     pass
+
+    if ratio_val is None:
+        print("[DATASTUDIO] Could not determine W/D ratio automatically. Defaulting to 0.0% (manual check).")
+        ratio_val = 0.0
 
     if ratio_val is not None:
         print(f"[DATASTUDIO] Parsed W/D ratio: {ratio_val}%")
@@ -1051,8 +1068,8 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Switched to Payment Log, selected Pending/Completed, and clicked Search.")
                 
-                print("[PLAYBISON] Waiting 5.5 seconds for search results to load...")
-                time.sleep(5.5)
+                print("[PLAYBISON] Waiting 6.5 seconds for status selection + search results to load...")
+                time.sleep(6.5)
                 
                 # Extract the last deposit ID from the Payment Log
                 js_get_last_deposit = load_macro("ds_get_last_deposit.js")
@@ -1476,6 +1493,11 @@ def main():
                     
                     # Clean up tabs safely
                     cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
+                    datastudio_opened = False
+                    wallet_opened = False
+                    sheets_opened = False
+                    duplicates_opened = False
+                    analytics_opened = False
                     
                     print("[DATASTUDIO] Done. Ready for next loop.")
                 else:
@@ -1485,6 +1507,10 @@ def main():
                 print(f"\n[PLAYBISON] Result: {verify_raw}")
     else:
         print("[DATASTUDIO] Could not determine W/D ratio automatically.")
+        
+    # Safety cleanup: ensure any remaining auxiliary tabs are closed and Chrome returns to Tab 1
+    if any([sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened]):
+        cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
         
     print("\n[MAIN] Script complete! Workflow finished.")
 

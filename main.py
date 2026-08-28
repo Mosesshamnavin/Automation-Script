@@ -39,23 +39,29 @@ def main():
         # 3. Wait for the clipboard to change (meaning the script found the email)
         email_found = False
         while True:
-            # Try to copy from the prompt that appears
-            pyautogui.hotkey('ctrl', 'c')
-            time.sleep(0.5)
-            
             clipboard_content = pyperclip.paste().strip()
-            # If clipboard changed from our waiting flag, and looks like an email
-            if clipboard_content != "WAITING_FOR_EMAIL" and "@" in clipboard_content:
+            
+            # If not yet copied, also trigger Ctrl+C in case a modal dialog appeared
+            if clipboard_content == "WAITING_FOR_EMAIL":
+                pyautogui.hotkey('ctrl', 'c')
+                time.sleep(0.4)
+                clipboard_content = pyperclip.paste().strip()
+            
+            # If clipboard changed from our waiting flag, and looks like an email (not raw JS code)
+            if (clipboard_content != "WAITING_FOR_EMAIL"
+                and not clipboard_content.startswith("(function")
+                and not clipboard_content.startswith("javascript:")
+                and "@" in clipboard_content):
                 parts = clipboard_content.split("|")
-                email = parts[0] if len(parts) > 0 else clipboard_content
-                player_id = parts[1] if len(parts) > 1 else ""
-                brand = parts[2] if len(parts) > 2 else ""
-                w_value = parts[3] if len(parts) > 3 else ""
+                email = parts[0].strip() if len(parts) > 0 else clipboard_content
+                player_id = parts[1].strip() if len(parts) > 1 else ""
+                brand = parts[2].strip() if len(parts) > 2 else ""
+                w_value = parts[3].strip() if len(parts) > 3 else ""
                 t_curr = (parts[4].strip() if len(parts) > 4 and parts[4].strip() else "PLN")
-                id_date = parts[5] if len(parts) > 5 else ""
-                wallet_id = parts[6] if len(parts) > 6 else ""
-                operator = parts[7] if len(parts) > 7 else ""
-                name = parts[8] if len(parts) > 8 else ""
+                id_date = parts[5].strip() if len(parts) > 5 else ""
+                wallet_id = parts[6].strip() if len(parts) > 6 else ""
+                operator = parts[7].strip() if len(parts) > 7 else ""
+                name = parts[8].strip() if len(parts) > 8 else ""
                 
                 print(f"\n[MAIN] Extracted Email: {email} | Transaction ID: {player_id} | Brand: {brand} | W-Value: {w_value} | T-Curr: {t_curr} | Wallet ID: {wallet_id} | Operator: {operator} | Name: {name}")
                 
@@ -77,7 +83,7 @@ def main():
                 # Put clean email in clipboard for Data Studio search input
                 pyperclip.copy(email)
                 
-                # Hit Enter to close the JS prompt
+                # Dismiss any prompt/dialog if one was open
                 pyautogui.press('enter')
                 email_found = True
                 break
@@ -86,8 +92,18 @@ def main():
             if clipboard_content == "FINISHED_SCAN":
                 print("[MAIN] Table scan finished, but no non-VIP records were found on this page.")
                 break
+
+            # If clipboard contains unexpected non-email data (e.g. accidental text from another window), reset waiting flag & dismiss
+            if (clipboard_content != "WAITING_FOR_EMAIL"
+                and clipboard_content != "FINISHED_SCAN"
+                and not clipboard_content.startswith("(function")
+                and not clipboard_content.startswith("javascript:")
+                and "@" not in clipboard_content):
+                pyautogui.press('enter')
+                time.sleep(0.3)
+                pyperclip.copy("WAITING_FOR_EMAIL")
                 
-            time.sleep(1.5)
+            time.sleep(1.0)
             
         if not email_found:
             print("[MAIN] No target found in this iteration. Retrying in 5 seconds...")
