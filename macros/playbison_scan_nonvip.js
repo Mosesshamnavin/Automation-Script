@@ -31,7 +31,7 @@
     return null;
   }
 
-  function isAfterPreviousDay1330(dateStr) {
+  function isAfterToday1330(dateStr) {
     if (!dateStr) return true;
     let m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
     if (!m) return true;
@@ -45,10 +45,37 @@
     let rowDate = new Date(y, mon, d, h, min, 0);
 
     let now = new Date();
-    // Yesterday at 13:30:00
-    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1 , 13, 30, 0);
+    // Today at 13:30:00
+    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 30, 0);
 
     return rowDate >= cutoff;
+  }
+
+  function copyToClipboard(payload, doc) {
+    let d = doc || document;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(payload);
+      }
+    } catch(e){}
+    try {
+      let ta = d.createElement('textarea');
+      ta.value = payload;
+      ta.style.position = 'fixed';
+      ta.style.top = '10px';
+      ta.style.left = '10px';
+      ta.style.width = '10px';
+      ta.style.height = '10px';
+      ta.style.opacity = '0.01';
+      ta.style.zIndex = '999999';
+      (d.body || document.body).appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, 999999);
+      d.execCommand('copy');
+      document.execCommand('copy');
+      setTimeout(() => { try { ta.remove(); } catch(e){} }, 500);
+    } catch(e){}
   }
 
   function checkPage() {
@@ -170,8 +197,8 @@
             dateVal = dateVal.replace(/[+-]\d{2}:\d{2}$/, '').trim();
           }
 
-          // Skip records that are older than previous day 13:30
-          if (dateVal && !isAfterPreviousDay1330(dateVal)) {
+          // Skip records that are older than today 13:30
+          if (dateVal && !isAfterToday1330(dateVal)) {
             continue;
           }
           
@@ -223,30 +250,14 @@
 
         if (foundTarget && foundEmail) {
           let payload = foundEmail + "|" + foundId + "|" + foundBrand + "|" + foundWValue + "|" + foundTCurr + "|" + foundDate + "|" + foundWalletId + "|" + foundOperator + "|" + foundName;
-          
-          // Direct clipboard write - never blocks the browser thread with modal dialogs
-          try {
-            let ta = document.createElement('textarea');
-            ta.value = payload;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-          } catch(e){}
+          copyToClipboard(payload, doc);
           return;
         }
 
         let prevBtn = findPrevButton(doc);
         if (prevBtn) {
           if (prevBtn.disabled || prevBtn.classList.contains('disabled') || prevBtn.parentElement.classList.contains('disabled')) {
-            try {
-              let ta = document.createElement('textarea');
-              ta.value = 'FINISHED_SCAN';
-              document.body.appendChild(ta);
-              ta.select();
-              document.execCommand('copy');
-              document.body.removeChild(ta);
-            } catch(e){}
+            copyToClipboard('FINISHED_SCAN', doc);
             return;
           }
           let oldPageNum = getCurrentPage(doc);
@@ -265,14 +276,7 @@
           }, 500);
           return;
         } else {
-          try {
-            let ta = document.createElement('textarea');
-            ta.value = 'FINISHED_SCAN';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-          } catch(e){}
+          copyToClipboard('FINISHED_SCAN', doc);
           return;
         }
       }
@@ -284,14 +288,7 @@
       setTimeout(checkPage, 1500);
     } else {
       window._rolesRetryCount = 0;
-      try {
-        let ta = document.createElement('textarea');
-        ta.value = 'FINISHED_SCAN';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      } catch(e){}
+      copyToClipboard('FINISHED_SCAN');
     }
   }
 

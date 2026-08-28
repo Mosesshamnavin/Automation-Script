@@ -18,6 +18,9 @@ install_requirements()
 import pyautogui
 import pyperclip
 
+pyautogui.FAILSAFE = False
+pyautogui.PAUSE = 0.05
+
 def main():
     print("\nSwitch to Chrome NOW! (You have 5 seconds...)")
     for i in range(5, 0, -1):
@@ -27,8 +30,23 @@ def main():
     scan_only = "--scan-only" in sys.argv
     
     if scan_only:
-        print("\n[LOOP MODE] Skipping Navigation and Filtering. Proceeding directly to Scan...")
-        time.sleep(1)
+        print("\n[LOOP MODE] Refreshing table (clicking Generate) to fetch latest withdrawals...")
+        pyautogui.hotkey('ctrl', '1')
+        time.sleep(0.4)
+        
+        # Click Generate to refresh table with any new incoming withdrawals
+        js_refresh = load_macro("playbison_refresh.js")
+        pyperclip.copy(js_refresh)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        print("Waiting 3.5 seconds for fresh table records to load...")
+        time.sleep(3.5)
     else:
         print("Executing Phase 1: Navigating...")
         
