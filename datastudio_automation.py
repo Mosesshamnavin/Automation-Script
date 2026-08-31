@@ -811,6 +811,24 @@ def main():
 
                         if trans_result in ["NO_STACK", "AUTOMATIC", "NO_TRANSACTIONS_TAB", "NO_DATE_INPUT"]:
                             print(f"[PLAYBISON] No stack found ({trans_result}). Continuing flow automatically...")
+                            if trans_result == "NO_TRANSACTIONS_TAB":
+                                # Wallet page likely didn't load properly — wait extra and
+                                # re-open Notes tab to force page interaction before Payment Log
+                                print("[PLAYBISON] ⚠️ Transactions tab not found (possible slow page load / network issue).")
+                                print("[PLAYBISON] Waiting 4 extra seconds for wallet page to fully render...")
+                                time.sleep(4.0)
+                                # Re-open Notes tab to verify the page is alive
+                                js_notes_retry = load_macro("ds_open_notes.js")
+                                pyperclip.copy(js_notes_retry)
+                                pyautogui.hotkey('ctrl', 'l')
+                                time.sleep(0.3)
+                                pyautogui.write('javascript:')
+                                time.sleep(0.2)
+                                pyautogui.hotkey('ctrl', 'v')
+                                time.sleep(0.3)
+                                pyautogui.press('enter')
+                                print("[PLAYBISON] Re-opened Notes tab. Waiting 3 seconds...")
+                                time.sleep(3.0)
                             break
                         elif trans_result.startswith("EXCEEDS_5_PAGES"):
                             dates_str = trans_result.split("|")[1] if "|" in trans_result else ""
@@ -1068,8 +1086,14 @@ def main():
                 pyautogui.press('enter')
                 print("[PLAYBISON] Switched to Payment Log, selected Pending/Completed, and clicked Search.")
                 
-                print("[PLAYBISON] Waiting 6.5 seconds for status selection + search results to load...")
-                time.sleep(6.5)
+                # If we had NO_TRANSACTIONS_TAB, the page was slow — give extra time for Payment Log
+                if trans_result == "NO_TRANSACTIONS_TAB":
+                    pay_log_wait = 10.0
+                    print(f"[PLAYBISON] Waiting {pay_log_wait} seconds for Payment Log (extended due to slow page load)...")
+                else:
+                    pay_log_wait = 6.5
+                    print(f"[PLAYBISON] Waiting {pay_log_wait} seconds for status selection + search results to load...")
+                time.sleep(pay_log_wait)
                 
                 # Extract the last deposit ID from the Payment Log
                 js_get_last_deposit = load_macro("ds_get_last_deposit.js")
@@ -1083,8 +1107,33 @@ def main():
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 
-                time.sleep(2.0)
-                payment_log_val = pyperclip.paste().strip()
+                # Poll clipboard in a retry loop (up to ~15 seconds) instead of a single 2s wait
+                # This handles cases where the page loads slowly (e.g. after NO_TRANSACTIONS_TAB)
+                payment_log_val = ""
+                for pay_poll in range(15):
+                    time.sleep(1.0)
+                    pyautogui.hotkey('ctrl', 'c')
+                    time.sleep(0.3)
+                    clip_check = pyperclip.paste().strip()
+                    if clip_check and clip_check.startswith("DEP_OP:"):
+                        payment_log_val = clip_check
+                        print(f"[PLAYBISON] Payment Log data received (poll {pay_poll + 1}/15).")
+                        break
+                    elif pay_poll == 4:
+                        # After 5 seconds, re-inject the macro in case it failed silently
+                        print("[PLAYBISON] No payment log data yet, re-injecting ds_get_last_deposit.js...")
+                        pyperclip.copy('WAITING')
+                        pyperclip.copy(js_get_last_deposit)
+                        pyautogui.hotkey('ctrl', 'l')
+                        time.sleep(0.3)
+                        pyautogui.write('javascript:')
+                        time.sleep(0.2)
+                        pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.3)
+                        pyautogui.press('enter')
+                else:
+                    payment_log_val = pyperclip.paste().strip()
+                    print(f"[PLAYBISON] Payment Log poll timed out. Last clipboard: '{payment_log_val[:80]}'")
                 last_deposit_op = "NOT_FOUND"
                 withdrawal_op = playbison_op
                 has_doc_req = False
