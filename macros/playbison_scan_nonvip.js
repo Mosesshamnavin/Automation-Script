@@ -8,6 +8,17 @@
     return docs;
   }
 
+  function simClick(el) {
+    if (!el) return;
+    try { el.focus(); } catch (e) {}
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    if (typeof el.click === 'function') el.click();
+  }
+
   function findPrevButton(doc) {
     let els = Array.from(doc.querySelectorAll('*'));
     let prev = els.reverse().find(e => {
@@ -24,11 +35,70 @@
     return prev;
   }
 
-  function getCurrentPage(doc) {
+  function getPageInfo(doc) {
     let txt = (doc.body.innerText || "") + " " + (doc.body.textContent || "");
     let matches = [...txt.matchAll(/(\d+)\s+of\s+(\d+)/gi)];
-    if (matches.length > 0) return matches[matches.length - 1][1];
+    if (matches.length > 0) {
+      let m = matches[matches.length - 1];
+      return { current: parseInt(m[1], 10), total: parseInt(m[2], 10) };
+    }
     return null;
+  }
+
+  function getCurrentPage(doc) {
+    let info = getPageInfo(doc);
+    return info ? String(info.current) : null;
+  }
+
+  function goToPage(doc, pageNum) {
+    let allInputs = Array.from(doc.querySelectorAll('input')).filter(
+      i => i.type !== 'hidden' && i.type !== 'button' && i.type !== 'submit' && (i.offsetWidth > 0 || i.getBoundingClientRect().width > 0)
+    );
+    let els = Array.from(doc.querySelectorAll('button, a, div, span'));
+    let goBtn = els.find(e => {
+      let t = (e.textContent || '').trim().toLowerCase();
+      let v = (e.value || '').trim().toLowerCase();
+      return (t === 'go' || v === 'go') && e.children.length === 0 && (e.offsetWidth > 0 || e.getBoundingClientRect().width > 0);
+    });
+
+    let targetInput = null;
+    if (goBtn) {
+      let btnR = goBtn.getBoundingClientRect();
+      let minD = Infinity;
+      for (let inp of allInputs) {
+        let r = inp.getBoundingClientRect();
+        let d = Math.abs(r.left - btnR.left) + Math.abs(r.top - btnR.top);
+        if (d < minD) { minD = d; targetInput = inp; }
+      }
+    }
+    if (!targetInput && allInputs.length > 0) {
+      targetInput = allInputs[allInputs.length - 1];
+    }
+
+    if (targetInput) {
+      try { targetInput.focus(); } catch(e){}
+      targetInput.value = pageNum;
+      try {
+        let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (setter) setter.call(targetInput, pageNum);
+      } catch(e){}
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+      targetInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      targetInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      targetInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+
+      if (goBtn) {
+        let clickTarget = goBtn.tagName === 'SPAN' ? goBtn.parentElement : goBtn;
+        setTimeout(() => {
+          simClick(clickTarget);
+          if (clickTarget !== goBtn) simClick(goBtn);
+          if (targetInput.form) {
+            try { targetInput.form.dispatchEvent(new Event('submit', { bubbles: true })); } catch(e){}
+          }
+        }, 200);
+      }
+    }
   }
 
   function isAfterToday1330(dateStr) {
@@ -45,8 +115,8 @@
     let rowDate = new Date(y, mon, d, h, min, 0);
 
     let now = new Date();
-    // Yesterday at 13:30:00
-    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() -1, 18, 30, 0);
+    // Yesterday at 18:42:00
+    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() -1, 18, 42, 0);
 
     return rowDate >= cutoff;
   }
@@ -89,6 +159,15 @@
 
     for (let doc of getFrames()) {
       if (!doc || !doc.body) continue;
+
+      // Auto-jump safeguard: if on Page 1 of multiple pages, jump to last page first
+      let pageInfo = getPageInfo(doc);
+      if (pageInfo && pageInfo.total > 1 && pageInfo.current === 1 && !window._hasAutoJumpedToLast) {
+        window._hasAutoJumpedToLast = true;
+        goToPage(doc, pageInfo.total);
+        setTimeout(checkPage, 3500);
+        return;
+      }
       let closeBtns = doc.querySelectorAll('.modal .close, .x-tool-close, button[aria-label="Close"], button[title="Close"], .close, [data-dismiss="modal"], a.close, [class*="modal-close"], [class*="dialog-close"]');
       for (let btn of closeBtns) {
         if (btn.offsetWidth > 0 || btn.offsetHeight > 0) {

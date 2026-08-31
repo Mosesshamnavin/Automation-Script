@@ -45,8 +45,22 @@ def main():
         time.sleep(0.3)
         pyautogui.press('enter')
         
-        print("Waiting 3.5 seconds for fresh table records to load...")
-        time.sleep(3.5)
+        print("Waiting 4.5 seconds for fresh table records to load...")
+        time.sleep(4.5)
+
+        print("[LOOP MODE] Navigating to the last page...")
+        js_macro_3 = load_macro("playbison_goto_last_page.js")
+        pyperclip.copy(js_macro_3)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.4)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.4)
+        pyautogui.press('enter')
+        
+        print("Waiting 5.5 seconds for the last page to load...")
+        time.sleep(5.5)
     else:
         print("Executing Phase 1: Navigating...")
         
@@ -79,8 +93,8 @@ def main():
         time.sleep(0.5)
         pyautogui.press('enter')
         
-        print("\nWaiting 4 seconds for the table to filter...")
-        time.sleep(4)
+        print("\nWaiting 6 seconds for the table to filter...")
+        time.sleep(6)
         
         print("Executing Phase 3: Navigating to the last page...")
         
@@ -96,8 +110,8 @@ def main():
         time.sleep(0.5)
         pyautogui.press('enter')
         
-        print("\nWaiting 6 seconds for the last page to load...")
-        time.sleep(6)
+        print("\nWaiting 6.5 seconds for the last page to load...")
+        time.sleep(6.5)
     
     print("Executing Phase 4: Auto-scanning backwards for non-VIP roles...")
     
