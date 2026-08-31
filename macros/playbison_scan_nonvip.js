@@ -45,8 +45,9 @@
     let rowDate = new Date(y, mon, d, h, min, 0);
 
     let now = new Date();
-    // Yesterday at 13:30:00
-    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() -1, 13, 30, 0);
+    // ONE-TIME FIXED CUTOFF: 2026-08-30 18:35:55 CEST (+02:00) = 16:35:55 UTC
+    // REVERT THIS after this run! Original: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 13, 30, 0)
+    let cutoff = new Date(2026, 7, 30, 18, 35, 55); // Month is 0-indexed, so 7 = August
 
     return rowDate >= cutoff;
   }
