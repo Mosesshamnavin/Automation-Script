@@ -115,8 +115,8 @@
     let rowDate = new Date(y, mon, d, h, min, 0);
 
     let now = new Date();
-    // Yesterday at 18:42:00
-    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() -1, 18, 42, 0);
+    // Yesterday at 13:30:00
+    let cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() -1, 13, 30, 0);
 
     return rowDate >= cutoff;
   }
