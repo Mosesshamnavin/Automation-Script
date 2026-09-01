@@ -422,9 +422,9 @@ def main():
     print("Waiting for Date Picker to open...")
     time.sleep(1.5)
     
-    print("Executing Phase 3: Setting the Date Range (61 days ago -> today)...")
+    print("Executing Phase 3: Setting the Date Range (2 months / 62 days ago -> today)...")
     end_wd = datetime.datetime.now(datetime.timezone.utc).date()
-    start_wd = end_wd - datetime.timedelta(days=61)
+    start_wd = end_wd - datetime.timedelta(days=62)
     print(f"[DATASTUDIO] W/D UTC range: {start_wd} -> {end_wd}")
     js_macro_3 = load_macro(
         "ds_set_date_range.js",

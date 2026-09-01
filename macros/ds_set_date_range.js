@@ -14,7 +14,7 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) {
       let endFallback = new Date();
       let startFallback = new Date(Date.UTC(endFallback.getUTCFullYear(), endFallback.getUTCMonth(), endFallback.getUTCDate()));
-      startFallback.setUTCDate(startFallback.getUTCDate() - 61);
+      startFallback.setUTCDate(startFallback.getUTCDate() - 62);
       endStr = toYMD(new Date(Date.UTC(endFallback.getUTCFullYear(), endFallback.getUTCMonth(), endFallback.getUTCDate())));
       startStr = toYMD(startFallback);
     }
