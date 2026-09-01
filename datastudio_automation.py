@@ -651,19 +651,20 @@ def main():
                 notes_cc_ver_90 = False # True if CC verified in notes within last 90 days (3 months)
                 notes_iban_ver = False  # True if IBAN verified in notes within last 90 days
                 notes_has_payment_notes = False  # True if payment/important notes exist
-                for i in range(15):
-                    pyperclip.copy("WAITING_FOR_NOTES")
-                    pyperclip.copy(js_check_notes)
-                    pyautogui.hotkey('ctrl', 'l')
-                    time.sleep(0.3)
-                    pyautogui.write('javascript:')
-                    time.sleep(0.2)
-                    pyautogui.hotkey('ctrl', 'v')
-                    time.sleep(0.3)
-                    pyautogui.press('enter')
-                    
-                    time.sleep(1.0) # Wait a bit before checking clipboard
-                    
+                # Inject Notes check macro once
+                pyperclip.copy("WAITING_FOR_NOTES")
+                pyperclip.copy(js_check_notes)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+
+                # Poll clipboard for notes result
+                for i in range(25):
+                    time.sleep(1.0)
                     clip_val = pyperclip.paste().strip()
                     if clip_val.startswith("REQ_FOUND:"):
                         res_part = clip_val.replace("REQ_FOUND:", "")
@@ -687,7 +688,18 @@ def main():
                                     notes_have_req = True
                                 print(f"[PLAYBISON] Checked top note: '{note_txt}' (Date: {top_note_date}, Verify docs: {notes_have_req}, CC verified: {notes_cc_ver}, IBAN verified: {notes_iban_ver}, Payment/Important notes: {notes_has_payment_notes})")
                                 break
-                    time.sleep(0.5)
+                    elif i == 10:
+                        # Fallback: re-inject if taking longer than 10 seconds
+                        print("[PLAYBISON] Notes scan still pending, re-injecting check macro...")
+                        pyperclip.copy("WAITING_FOR_NOTES")
+                        pyperclip.copy(js_check_notes)
+                        pyautogui.hotkey('ctrl', 'l')
+                        time.sleep(0.3)
+                        pyautogui.write('javascript:')
+                        time.sleep(0.2)
+                        pyautogui.hotkey('ctrl', 'v')
+                        time.sleep(0.3)
+                        pyautogui.press('enter')
 
                 if notes_have_req:
                     print("[PLAYBISON] Keyword 'req' or 'rem' detected in top note, but document checking is disabled for LOOP mode. Skipping Mistral.")
