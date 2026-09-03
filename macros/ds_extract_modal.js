@@ -92,6 +92,16 @@
       let wid = getVal('wallet_id') || getVal('wallet id') || getVal('Wallet ID') || getVal('Wallet');
       let city = getVal('city') || getVal('City');
 
+      let emailVal = getVal('login') || getVal('email') || getVal('player login') || getVal('user') || '';
+      if (!emailVal || !emailVal.includes('@')) {
+        let rootTxt = root.innerText || root.textContent || '';
+        let emMatch = rootTxt.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        if (emMatch) emailVal = emMatch[0].trim().toLowerCase();
+      }
+      let brandVal = getVal('brand') || '';
+      let wValueVal = getVal('amount') || getVal('value') || getVal('w value') || '';
+      let tCurrVal = getVal('currency') || getVal('t currency') || getVal('w currency') || '';
+
       // If wid is empty in labels, check input fields/cells inside active modal container
       if (!wid) {
         let allInputs = Array.from(root.querySelectorAll('input, td, span, a'));
@@ -100,7 +110,7 @@
       }
 
       if (op.includes('COINSPAID')) {
-        prompt('RESULT:', 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op);
+        prompt('RESULT:', 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal);
         return;
       }
 
@@ -166,7 +176,7 @@
       let cleanAccHolder = hasValidAccountHolder ? accountHolder : '';
       let tpFlag = isThirdParty ? "YES" : "NO";
       let resPrefix = isThirdParty ? ("NAMEFAIL:" + (cleanAccHolder || (fn + ' ' + ln))) : (acc || directIban || 'OK');
-      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag);
+      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal);
       return;
     }
 

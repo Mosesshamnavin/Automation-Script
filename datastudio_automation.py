@@ -118,6 +118,25 @@ def main():
     w_value = ""
     t_curr = "PLN"
     id_date = ""
+
+    custom_id = None
+    custom_email = None
+    if "--id" in sys.argv:
+        try:
+            id_idx = sys.argv.index("--id") + 1
+            if id_idx < len(sys.argv):
+                custom_id = sys.argv[id_idx].strip()
+        except Exception:
+            pass
+
+    if "--email" in sys.argv:
+        try:
+            em_idx = sys.argv.index("--email") + 1
+            if em_idx < len(sys.argv):
+                custom_email = sys.argv[em_idx].strip().lower()
+        except Exception:
+            pass
+
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r") as f:
@@ -133,6 +152,26 @@ def main():
                 id_date = data.get("id_date", "")
         except Exception:
             pass
+
+    if custom_email:
+        print(f"[MAIN] Direct Player Email specified: {custom_email}")
+        player_email = custom_email
+
+    if custom_id:
+        if player_id != custom_id:
+            print(f"[MAIN] Direct Withdrawal ID specified: {custom_id}")
+            player_id = custom_id
+            if not custom_email:
+                player_email = ""
+            player_brand = player_brand or "bison casino"
+            player_name = ""
+            saved_wid = ""
+            saved_operator = ""
+            w_value = ""
+            t_curr = "PLN"
+            id_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            player_id = custom_id
             
     # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
     pyautogui.hotkey('ctrl', '1')
@@ -231,8 +270,9 @@ def main():
     city = ""
     playbison_op = ""
     if rest:
-        if "|ACCHOLDER:" in rest:
-            rest = rest.split("|ACCHOLDER:")[0]
+        for tag in ["|ACCHOLDER:", "|EMAIL:", "|BRAND:", "|WVAL:", "|CURR:"]:
+            if tag in rest:
+                rest = rest.split(tag)[0]
         if "|LN:" in rest:
             fn, rest = rest.split("|LN:")
             fn = fn.strip()
@@ -247,6 +287,43 @@ def main():
                     ln, city = rest.split("|CITY:")
                     ln = ln.strip()
                     city = city.strip()
+    if playbison_op:
+        playbison_op = playbison_op.split("|")[0].strip()
+
+    modal_email = ""
+    modal_brand = ""
+    modal_wval = ""
+    modal_curr = ""
+    if "|EMAIL:" in wallet_id_and_rest:
+        try:
+            modal_email = wallet_id_and_rest.split("|EMAIL:")[1].split("|")[0].strip()
+        except Exception:
+            pass
+    if "|BRAND:" in wallet_id_and_rest:
+        try:
+            modal_brand = wallet_id_and_rest.split("|BRAND:")[1].split("|")[0].strip()
+        except Exception:
+            pass
+    if "|WVAL:" in wallet_id_and_rest:
+        try:
+            modal_wval = wallet_id_and_rest.split("|WVAL:")[1].split("|")[0].strip()
+        except Exception:
+            pass
+    if "|CURR:" in wallet_id_and_rest:
+        try:
+            modal_curr = wallet_id_and_rest.split("|CURR:")[1].split("|")[0].strip()
+        except Exception:
+            pass
+
+    if modal_email and "@" in modal_email:
+        player_email = modal_email
+        print(f"[PLAYBISON] Extracted Player Email from modal: {player_email}")
+    if modal_brand and (not player_brand or player_brand == "bison casino"):
+        player_brand = modal_brand
+    if modal_wval and not w_value:
+        w_value = modal_wval
+    if modal_curr:
+        t_curr = modal_curr
 
     # Safety guard: PAYSAFECARD, SKRILL, COINSPAID, or null/empty account holder is never third party
     op_upper = playbison_op.upper() if playbison_op else ""
@@ -369,6 +446,57 @@ def main():
         print(f"\n[PLAYBISON] Name mismatch or error: {verify_raw}")
         approval_status = "Error (Name Mismatch)"
 
+    # Ensure player_email is resolved before opening Data Studio
+    if not player_email and wallet_id and wallet_id != "NOTFOUND" and "..." not in wallet_id:
+        print(f"[PLAYBISON] Resolving Player Email from user profile (#action:admin.user:{wallet_id})...")
+        wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
+        webbrowser.open_new_tab(wallet_url)
+        time.sleep(5.5)
+        js_extract_player_id = load_macro("ds_extract_player_id.js")
+        pyperclip.copy('WAITING_FOR_ID')
+        pyperclip.copy(js_extract_player_id)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        time.sleep(1.2)
+        res_prof = pyperclip.paste().strip()
+        if res_prof and res_prof != "WAITING_FOR_ID" and not res_prof.startswith("(function"):
+            if "|EMAIL:" in res_prof:
+                em = res_prof.split("|EMAIL:")[1].strip()
+                if "@" in em:
+                    player_email = em
+                    print(f"[PLAYBISON] Successfully extracted Player Email: {player_email}")
+            if "|NAME:" in res_prof:
+                nm = res_prof.split("|NAME:")[1].split("|")[0].strip()
+                if nm and not true_player_name:
+                    true_player_name = nm
+            p_id = res_prof.split("|")[0].strip()
+            if p_id.isdigit():
+                true_player_id = p_id
+        # Close the profile tab before launching Data Studio
+        pyautogui.hotkey('ctrl', 'w')
+        time.sleep(0.4)
+
+    # Save resolved user data to last_user.json so state is synchronized
+    try:
+        with open("last_user.json", "w") as f:
+            json.dump({
+                "email": player_email,
+                "id": player_id,
+                "brand": player_brand or "bison casino",
+                "w_value": w_value,
+                "t_curr": t_curr,
+                "id_date": id_date,
+                "wallet_id": wallet_id,
+                "operator": playbison_op,
+                "name": true_player_name or player_name or f"{fn} {ln}".strip()
+            }, f, indent=2)
+    except Exception:
+        pass
     
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
     datastudio_opened = True

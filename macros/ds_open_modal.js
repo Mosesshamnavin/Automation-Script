@@ -27,8 +27,14 @@
   }
 
   // 2. Set the window hash to trigger details modal
-  if (id) {
-    window.location.hash = '#action:admin.payment.details:' + id;
+  if (id && !id.startsWith('###')) {
+    if (window.location.hash === '#action:admin.payment.details:' + id) {
+      window.location.hash = '#action:admin.payment.details:' + id + '_toggle';
+    }
+    setTimeout(() => {
+      window.location.hash = '#action:admin.payment.details:' + id;
+      try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch(e){}
+    }, 50);
   }
 
   // 3. Find and click the specific row or link for this ID or Email
