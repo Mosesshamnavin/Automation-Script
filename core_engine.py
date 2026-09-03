@@ -74,12 +74,12 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                     "id": parts[2] if len(parts) > 2 else "",
                     "player_id": parts[2] if len(parts) > 2 else "",
                     "brand": parts[3] if len(parts) > 3 else "bison casino",
-                    "city": parts[4] if len(parts) > 4 else "",
+                    "city": parts[4].split("(")[0].strip() if len(parts) > 4 and parts[4] else "",
                     "wallet_id": parts[5] if len(parts) > 5 else "",
                     "name": parts[6] if len(parts) > 6 else ""
                 }
                 if on_log:
-                    on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | Wallet: {data['wallet_id']}")
+                    on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | City: {data['city']} | Wallet: {data['wallet_id']}")
                 return data
 
             elif res == "FILTER_APPLIED":
@@ -106,12 +106,12 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                             "id": parts[2] if len(parts) > 2 else "",
                             "player_id": parts[2] if len(parts) > 2 else "",
                             "brand": parts[3] if len(parts) > 3 else "bison casino",
-                            "city": parts[4] if len(parts) > 4 else "",
+                            "city": parts[4].split("(")[0].strip() if len(parts) > 4 and parts[4] else "",
                             "wallet_id": parts[5] if len(parts) > 5 else "",
                             "name": parts[6] if len(parts) > 6 else ""
                         }
                         if on_log:
-                            on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | Wallet: {data['wallet_id']}")
+                            on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | City: {data['city']} | Wallet: {data['wallet_id']}")
                         return data
                     elif res_f.startswith("FOUND_WITHDRAWAL|"):
                         parts = res_f.split("|")

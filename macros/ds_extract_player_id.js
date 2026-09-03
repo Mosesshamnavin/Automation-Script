@@ -86,11 +86,47 @@
   let city = '';
   let cityLabel = all.find(e => {
     let t = (e.textContent || '').trim().toLowerCase();
-    return (t === 'city:' || t === 'city') && e.children.length === 0;
+    return (t === 'city:' || t === 'city' || t === 'town:' || t === 'town') && e.children.length === 0;
   });
   if (cityLabel) {
     let next = cityLabel.nextElementSibling || (cityLabel.parentElement ? cityLabel.parentElement.querySelector('strong, span, dd, td, input') : null);
+    if (!next && cityLabel.closest('tr')) {
+      let tr = cityLabel.closest('tr');
+      if (tr.children.length >= 2) next = tr.children[1];
+    }
     if (next) city = (next.textContent || next.value || '').trim();
+  }
+  if (!city) {
+    let cityInput = Array.from(document.querySelectorAll('input')).find(i => {
+      let n = (i.name || i.id || i.placeholder || '').toLowerCase();
+      return n === 'city' || n.includes('city');
+    });
+    if (cityInput && cityInput.value) {
+      city = cityInput.value.trim();
+    }
+  }
+  if (!city) {
+    let tds = Array.from(document.querySelectorAll('td, th, dt, dd, div, span'));
+    for (let i = 0; i < tds.length; i++) {
+      let t = tds[i].textContent.trim().toLowerCase();
+      if ((t === 'city:' || t === 'city' || t === 'city (postal code):' || t === 'city (postal code)') && tds[i].children.length === 0) {
+        let sibling = tds[i].nextElementSibling;
+        if (sibling && (sibling.textContent || sibling.value)) {
+          city = (sibling.textContent || sibling.value || '').trim();
+          break;
+        }
+      }
+    }
+  }
+  if (!city) {
+    let cityMatch = txt.match(/\bcity\s*[:=]?\s*([a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s-]+)/i);
+    if (cityMatch) {
+      let candCity = cityMatch[1].trim().split('\n')[0].trim();
+      if (candCity && candCity.length < 30) city = candCity;
+    }
+  }
+  if (city && city.includes('(')) {
+    city = city.split('(')[0].trim();
   }
 
   let res = id + '|NAME:' + name + '|EMAIL:' + email + '|WALLET:' + walletId + '|CITY:' + city;

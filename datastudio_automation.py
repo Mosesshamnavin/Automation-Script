@@ -319,7 +319,7 @@ def main():
     # Extract fn, ln, city, op
     fn = ""
     ln = ""
-    city = ""
+    modal_city = ""
     playbison_op = ""
     if rest:
         for tag in ["|ACCHOLDER:", "|EMAIL:", "|BRAND:", "|WVAL:", "|CURR:"]:
@@ -332,13 +332,15 @@ def main():
                 if "|OP:" in rest:
                     ln, rest = rest.split("|CITY:")
                     ln = ln.strip()
-                    city, playbison_op = rest.split("|OP:")
-                    city = city.strip()
+                    modal_city, playbison_op = rest.split("|OP:")
+                    modal_city = modal_city.strip()
                     playbison_op = playbison_op.strip()
                 else:
-                    ln, city = rest.split("|CITY:")
+                    ln, modal_city = rest.split("|CITY:")
                     ln = ln.strip()
-                    city = city.strip()
+                    modal_city = modal_city.strip()
+    if modal_city:
+        city = modal_city.split("(")[0].strip()
     if playbison_op:
         playbison_op = playbison_op.split("|")[0].strip()
 
@@ -538,18 +540,19 @@ def main():
 
     # Save resolved user data to last_user.json so state is synchronized
     try:
-        with open("last_user.json", "w") as f:
+        with open("last_user.json", "w", encoding="utf-8") as f:
             json.dump({
                 "email": player_email,
                 "id": player_id,
                 "brand": player_brand or "bison casino",
+                "city": city,
                 "w_value": w_value,
                 "t_curr": t_curr,
                 "id_date": id_date,
                 "wallet_id": wallet_id,
                 "operator": playbison_op,
                 "name": true_player_name or player_name or f"{fn} {ln}".strip()
-            }, f, indent=2)
+            }, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
     
@@ -1723,6 +1726,16 @@ def main():
 
                     if w_value and not w_value_display:
                         w_value_display = f"{w_value} {t_curr}".strip() if (t_curr and t_curr not in str(w_value)) else str(w_value)
+
+                    if not city:
+                        try:
+                            if os.path.exists("last_user.json"):
+                                with open("last_user.json", "r", encoding="utf-8") as f:
+                                    c_json = json.load(f).get("city", "")
+                                    if c_json:
+                                        city = c_json.split("(")[0].strip()
+                        except Exception:
+                            pass
 
                     row_data = f"{sheet_date}\t{withdrawal_id}\t{extracted_id}\t{name_to_use}\t{final_wid}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
