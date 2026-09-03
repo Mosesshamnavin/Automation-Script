@@ -8,10 +8,32 @@ import webbrowser
 import datetime
 import sys
 import urllib.request
+
+# Ensure UTF-8 output on Windows terminal/subprocesses so non-ASCII characters (Polish, etc.) don't crash cp1252
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from macro_loader import load_macro
 
 # Cache live exchange rates per session to avoid repeated API calls
 _fx_rate_cache = {}
+
+def format_sheet_date(date_str: str) -> str:
+    """Format any date string to clean 'YYYY-MM-DD HH:MM:SS' without 'T' or timezone offsets."""
+    if not date_str:
+        return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    s = str(date_str).strip()
+    s = s.replace('T', ' ')
+    # Strip timezone offsets like +02:00, -05:00, Z
+    s = re.sub(r'([+-]\d{2}:\d{2}|Z)$', '', s).strip()
+    m = re.match(r'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}', s)
+    if m:
+        return m.group(0)
+    return s
 
 def convert_to_pln(amount_str, currency, **kwargs):
     """Convert an amount in a given currency to PLN using live exchange rates.
@@ -110,10 +132,13 @@ def main():
 
     # Read saved user ID, email & brand if available
     import json, os, re
+    withdrawal_id = ""
     player_id = ""
     player_email = ""
     player_brand = ""
     player_name = ""
+    true_player_id = ""
+    true_player_name = ""
     saved_wid = ""
     w_value = ""
     t_curr = "PLN"
@@ -126,6 +151,7 @@ def main():
             id_idx = sys.argv.index("--id") + 1
             if id_idx < len(sys.argv):
                 custom_id = sys.argv[id_idx].strip()
+                withdrawal_id = custom_id
         except Exception:
             pass
 
@@ -137,12 +163,13 @@ def main():
         except Exception:
             pass
 
+    city = ""
     if os.path.exists("last_user.json"):
         try:
-            with open("last_user.json", "r") as f:
+            with open("last_user.json", "r", encoding="utf-8") as f:
                 data = json.load(f)
                 player_email = data.get("email", "")
-                player_id = data.get("id", "")
+                player_id = data.get("id", "") or data.get("player_id", "")
                 player_brand = data.get("brand", "")
                 player_name = data.get("name", "")
                 saved_wid = data.get("wallet_id", "").strip()
@@ -150,12 +177,28 @@ def main():
                 w_value = data.get("w_value", "")
                 t_curr = data.get("t_curr", "PLN")
                 id_date = data.get("id_date", "")
+                raw_city = data.get("city", "")
+                if raw_city:
+                    city = raw_city.split("(")[0].strip()
         except Exception:
             pass
 
     if custom_email:
-        print(f"[MAIN] Direct Player Email specified: {custom_email}")
-        player_email = custom_email
+        if player_email.lower() != custom_email.lower():
+            print(f"[MAIN] Direct Player Email specified: {custom_email} (resetting previous cache)")
+            player_email = custom_email
+            if not custom_id:
+                player_id = ""
+                player_brand = player_brand or "bison casino"
+                player_name = ""
+                saved_wid = ""
+                saved_operator = ""
+                w_value = ""
+                t_curr = "PLN"
+                city = ""
+                id_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            player_email = custom_email
 
     if custom_id:
         if player_id != custom_id:
@@ -173,52 +216,61 @@ def main():
         else:
             player_id = custom_id
             
-    # Step A: Switch to Playbison tab and open modal via hash navigation + DOM click
-    pyautogui.hotkey('ctrl', '1')
-    time.sleep(1)
-    
-    js_open_modal = load_macro("ds_open_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email)
-    
-    pyperclip.copy(js_open_modal)
-    pyautogui.hotkey('ctrl', 'l')
-    time.sleep(0.3)
-    pyautogui.write('javascript:')
-    time.sleep(0.2)
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.3)
-    pyautogui.press('enter')
-    
-    print("[PLAYBISON] Waiting 3.5 seconds for Payment Details modal to open...")
-    time.sleep(3.5)
-    
-    # Step B: Extract maskedAccount + wallet_id from open modal
-    # Uses getVal('wallet_id') - same proven logic as first/last name extraction.
-    # wallet_id is returned via prompt so Python can open it (window.open blocked in bookmarklets).
-    # Handles Operator conditions: COINSPAID (skip), PAYSAFECARD/SKRILL (skip name check), BANK WITHDRAWAL PIQ (default check)
-    js_extract_macro = load_macro("ds_extract_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email, PLAYER_NAME=player_name)
-    
-    pyperclip.copy("WAITING_FOR_PROMPT")
-    pyperclip.copy(js_extract_macro)
-    pyautogui.hotkey('ctrl', 'l')
-    time.sleep(0.3)
-    pyautogui.write('javascript:')
-    time.sleep(0.2)
-    pyautogui.hotkey('ctrl', 'v')
-    time.sleep(0.3)
-    pyautogui.press('enter')
-    
+    # Step A & B: If player_id is provided, open modal via hash navigation & extract details
     verify_raw = ""
-    for _ in range(6):
-        time.sleep(0.8)
-        pyautogui.hotkey('ctrl', 'c')
+    wallet_id = ""
+    is_third_party_request = False
+    modal_account_holder = ""
+    wallet_id_and_rest = ""
+    rest = ""
+
+    # Only open payment details modal if player_id is a withdrawal ID (not just a user ID)
+    is_withdrawal_id = bool(player_id and len(player_id) >= 7 and player_id.startswith("6"))
+    if player_id and (is_withdrawal_id or not custom_email):
+        pyautogui.hotkey('ctrl', '1')
+        time.sleep(0.5)
+        pyautogui.press('escape')
         time.sleep(0.3)
-        clip_val = pyperclip.paste().strip()
-        if clip_val and clip_val != "WAITING_FOR_PROMPT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
-            verify_raw = clip_val
-            pyautogui.press('enter')
-            break
-    else:
+        
+        js_open_modal = load_macro("ds_open_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email)
+        pyperclip.copy(js_open_modal)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
         pyautogui.press('enter')
+        
+        print("[PLAYBISON] Waiting 3.5 seconds for Payment Details modal to open...")
+        time.sleep(3.5)
+        
+        js_extract_macro = load_macro("ds_extract_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email, PLAYER_NAME=player_name)
+        pyperclip.copy("WAITING_FOR_PROMPT")
+        pyperclip.copy(js_extract_macro)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        for _ in range(6):
+            time.sleep(0.8)
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.3)
+            clip_val = pyperclip.paste().strip()
+            if clip_val and clip_val != "WAITING_FOR_PROMPT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
+                verify_raw = clip_val
+                pyautogui.press('enter')
+                time.sleep(0.2)
+                pyautogui.press('escape')
+                break
+        else:
+            pyautogui.press('enter')
+            time.sleep(0.2)
+            pyautogui.press('escape')
     
     # Chrome prompt() Ctrl+C copies the INPUT FIELD value only, not the label.
     # Format: "maskedAccount_value|WALLET:hexId"  or  "NAMEFAIL:first last|WALLET:hexId"
@@ -316,8 +368,11 @@ def main():
             pass
 
     if modal_email and "@" in modal_email:
-        player_email = modal_email
-        print(f"[PLAYBISON] Extracted Player Email from modal: {player_email}")
+        if not custom_email:
+            player_email = modal_email
+            print(f"[PLAYBISON] Extracted Player Email from modal: {player_email}")
+        else:
+            print(f"[PLAYBISON] Preserving direct user email '{custom_email}' (ignoring modal email '{modal_email}')")
     if modal_brand and (not player_brand or player_brand == "bison casino"):
         player_brand = modal_brand
     if modal_wval and not w_value:
@@ -506,7 +561,7 @@ def main():
     time.sleep(9)
     
     print("Executing Phase 1: Switching to Bison BO and focusing Email...")
-    email_to_paste = player_email.strip().lower() if player_email else pyperclip.paste().strip().lower()
+    email_to_paste = (custom_email or player_email).strip().lower()
     
     # Macro 1: Switch to Bison BO and focus the precise <input> box
     js_macro_1 = load_macro("ds_switch_email.js")
@@ -690,12 +745,15 @@ def main():
             print(f"[DATASTUDIO] Opening wallet page for '{player_email or player_id}'...")
             
             # Open wallet_id in new tab regardless of match result
-            if (not wallet_id or wallet_id == "NOTFOUND" or "..." in wallet_id) and saved_wid and len(saved_wid) > 10 and "..." not in saved_wid:
-                wallet_id = saved_wid
-            elif not wallet_id and player_id:
-                wallet_id = player_id
+            if not wallet_id or wallet_id == "NOTFOUND" or "..." in wallet_id:
+                if saved_wid and saved_wid != "NOTFOUND" and "..." not in saved_wid:
+                    wallet_id = saved_wid
+                elif player_id and player_id != "NOTFOUND":
+                    wallet_id = player_id
+                else:
+                    wallet_id = ""
 
-            if wallet_id:
+            if wallet_id and wallet_id != "NOTFOUND":
                 wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
                 print(f"[PLAYBISON] Opening wallet_id in new tab: {wallet_url}")
                 wallet_opened = True
@@ -718,6 +776,7 @@ def main():
                 
                 time.sleep(1.2)
                 clipboard_res = pyperclip.paste().strip()
+                true_player_id = ""
                 true_player_name = ""
                 # Verify clipboard is NOT the injected JS code itself or waiting flag
                 if (clipboard_res and 
@@ -725,12 +784,31 @@ def main():
                     not clipboard_res.startswith("(function") and 
                     not "document.createElement" in clipboard_res):
                     
+                    if "|WALLET:" in clipboard_res:
+                        w_hex = clipboard_res.split("|WALLET:")[1].split("|")[0].strip()
+                        if len(w_hex) >= 15:
+                            wallet_id = w_hex
+                            saved_wid = w_hex
+                            print(f"[PLAYBISON] Extracted true Hex Wallet ID from wallet page: {wallet_id}")
+                    if "|CITY:" in clipboard_res:
+                        c_prof = clipboard_res.split("|CITY:")[1].split("|")[0].strip()
+                        if c_prof and not city:
+                            city = c_prof.split("(")[0].strip()
+                            print(f"[PLAYBISON] Extracted City from wallet page: {city}")
+
                     if "|NAME:" in clipboard_res:
                         parts = clipboard_res.split("|NAME:")
                         cand_id = parts[0].strip()
                         if cand_id.isdigit():
                             true_player_id = cand_id
-                        true_player_name = parts[1].strip()
+                        raw_name = parts[1].strip()
+                        if "|EMAIL:" in raw_name:
+                            name_part, email_part = raw_name.split("|EMAIL:", 1)
+                            true_player_name = name_part.strip()
+                            if email_part.strip() and not player_email:
+                                player_email = email_part.strip().split("|")[0].strip()
+                        else:
+                            true_player_name = raw_name.split("|")[0].strip()
                     elif clipboard_res.isdigit():
                         true_player_id = clipboard_res
 
@@ -1310,6 +1388,24 @@ def main():
                                     dep_date = field.replace("DEP_DATE:", "").strip()
                                 elif field.startswith("PREV_WITH_DATE:"):
                                     prev_with_date = field.replace("PREV_WITH_DATE:", "").strip()
+                                elif field.startswith("WITH_ID:"):
+                                    w_id_log = field.replace("WITH_ID:", "").strip()
+                                    if w_id_log and (not withdrawal_id or withdrawal_id == player_id or len(str(withdrawal_id)) < 7):
+                                        withdrawal_id = w_id_log
+                                        print(f"[PLAYBISON] Extracted true Withdrawal ID from Payment Log: {withdrawal_id}")
+                                elif field.startswith("WITH_VAL:"):
+                                    w_val_log = field.replace("WITH_VAL:", "").strip()
+                                    if w_val_log and not w_value:
+                                        w_value = w_val_log
+                                        print(f"[PLAYBISON] Extracted Withdrawal Amount from Payment Log: {w_value}")
+                                elif field.startswith("WITH_CURR:"):
+                                    w_curr_log = field.replace("WITH_CURR:", "").strip()
+                                    if w_curr_log:
+                                        t_curr = w_curr_log
+                                elif field.startswith("WITH_DATE:"):
+                                    w_date_log = field.replace("WITH_DATE:", "").strip()
+                                    if w_date_log and not id_date:
+                                        id_date = w_date_log
                         else:
                             if with_rest != "NOT_FOUND":
                                 withdrawal_op = with_rest
@@ -1351,8 +1447,8 @@ def main():
                 else:
                     print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
                 
-                # Use the true player_id extracted from the wallet page
-                extracted_id = true_player_id
+                # Use the true player_id extracted from the wallet page or fallback to player_id
+                extracted_id = true_player_id or player_id or ""
                 
                 # Close Wallet tab immediately before opening Google Sheets
                 if wallet_opened:
@@ -1361,10 +1457,10 @@ def main():
                     time.sleep(0.3)
                     wallet_opened = False
                 
-                if extracted_id and extracted_id.isdigit():
+                if extracted_id or player_email:
                     print(f"\n[GOOGLE SHEETS] Formatting data for Google Sheets...")
                     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    sheet_date = id_date or now_str
+                    sheet_date = format_sheet_date(id_date) if id_date else now_str
                     wid_log = wallet_id if (wallet_id and wallet_id != "NOTFOUND" and "..." not in wallet_id) else (saved_wid or "")
                     print(f"[GOOGLE SHEETS] Date & Time: {sheet_date} | Withdrawal ID: {player_id} | Player ID: {extracted_id} | Wallet ID: {wid_log}")
                      
@@ -1601,9 +1697,33 @@ def main():
                         else:
                             approval_status = "Approve"
                         
-                    name_to_use = true_player_name.strip() if (true_player_name and true_player_name.strip()) else (f"{fn} {ln}".strip() if (fn or ln) else player_name)
-                    withdrawal_id = player_id
-                    final_wid = wallet_id if (wallet_id and wallet_id != "NOTFOUND" and "..." not in wallet_id) else (saved_wid or "")
+                    # Determine best name to use, rejecting bogus field labels like 'email'
+                    name_to_use = ""
+                    for cand in [f"{fn} {ln}".strip() if (fn or ln) else "", player_name.strip() if player_name else "", true_player_name.strip() if true_player_name else ""]:
+                        if cand and cand.lower() not in ["email", "name", "login", "user", "id", "null", "undefined"]:
+                            name_to_use = cand
+                            break
+                    if not name_to_use:
+                        name_to_use = true_player_name.strip() or player_name or ""
+                    # Keep true withdrawal_id if found, else fallback to player_id / extracted_id
+                    if not withdrawal_id or withdrawal_id == extracted_id or len(str(withdrawal_id)) < 7:
+                        if player_id and len(str(player_id)) >= 7:
+                            withdrawal_id = player_id
+                        elif not withdrawal_id:
+                            withdrawal_id = extracted_id or player_id or ""
+
+                    # Hex wallet ID should preferably be a 24-character hex ID (e.g. 6191abb85d0fbec8ec110bf3)
+                    final_wid = ""
+                    for wid_cand in [wallet_id, saved_wid]:
+                        if wid_cand and len(str(wid_cand)) >= 20 and re.match(r'^[a-f0-9]+$', str(wid_cand), re.I):
+                            final_wid = str(wid_cand).strip()
+                            break
+                    if not final_wid:
+                        final_wid = wallet_id if (wallet_id and wallet_id != "NOTFOUND" and "..." not in str(wallet_id)) else (saved_wid or "")
+
+                    if w_value and not w_value_display:
+                        w_value_display = f"{w_value} {t_curr}".strip() if (t_curr and t_curr not in str(w_value)) else str(w_value)
+
                     row_data = f"{sheet_date}\t{withdrawal_id}\t{extracted_id}\t{name_to_use}\t{final_wid}\t{w_value_display}\t{player_email}\t{city}\t{withdrawal_op}\t{player_brand}\t{ratio_str}\t{dup_res}\t{trans_result_clean}\t{games_col}\t{bonus_col}\t{last_deposit_op}\t{approval_status}"
                     pyperclip.copy(row_data)
                     

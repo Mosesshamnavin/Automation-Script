@@ -38,6 +38,20 @@
         return style.display !== 'none' && style.visibility !== 'hidden' && (c.offsetWidth > 0 || c.offsetHeight > 0);
       });
 
+      // Fallback: If no standard modal containers found, find container enclosing 'Payments Details'
+      if (visibleContainers.length === 0) {
+        let headers = Array.from(doc.querySelectorAll('div, span, h1, h2, h3, h4, p, td, th')).filter(e => {
+          let t = e.textContent.trim().toLowerCase();
+          return t.startsWith('payments details') || t.startsWith('payment details');
+        });
+        for (let h of headers) {
+          let parent = h.closest('.x-window, .modal, [role="dialog"], .dialog, .popup, div[style*="position: fixed"], div[style*="position: absolute"]') || h.parentElement;
+          if (parent && !visibleContainers.includes(parent)) {
+            visibleContainers.push(parent);
+          }
+        }
+      }
+
       let activeContainer = null;
 
       // 1. Try to find container matching targetId
@@ -176,12 +190,33 @@
       let cleanAccHolder = hasValidAccountHolder ? accountHolder : '';
       let tpFlag = isThirdParty ? "YES" : "NO";
       let resPrefix = isThirdParty ? ("NAMEFAIL:" + (cleanAccHolder || (fn + ' ' + ln))) : (acc || directIban || 'OK');
-      prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal);
+      let fullRes = resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal;
+      try {
+        let ta = doc.createElement('textarea');
+        ta.value = fullRes;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0.01';
+        (doc.body || document.body).appendChild(ta);
+        ta.select();
+        doc.execCommand('copy');
+        ta.remove();
+      } catch(e){}
+      try { prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', fullRes); } catch(e){}
       return;
     }
 
-    prompt('ERROR:', 'NOTFOUND|WALLET:');
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = 'NOTFOUND|WALLET:';
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0.01';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    } catch(e){}
+    try { prompt('ERROR:', 'NOTFOUND|WALLET:'); } catch(e){}
   } catch (e) {
-    prompt('ERROR:', 'NOTFOUND|WALLET:');
+    try { prompt('ERROR:', 'NOTFOUND|WALLET:'); } catch(e){}
   }
 })();

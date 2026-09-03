@@ -126,7 +126,48 @@
           prevWithDate = prevWithRow.children[dateIdx].textContent.trim();
         }
 
-        depositInfo = { depOp: depOpName, withOp: withOpName, req: hasReq, ccDepCount: ccDepCount, ccVerInLog: ccVerInLog, depDate: depDate, prevWithDate: prevWithDate };
+        let amountIdx = headerCells.findIndex(c => {
+          let t = c.textContent.trim().toLowerCase();
+          return t === 'amount' || t === 'value' || t === 'w value' || t === 't value' || t.includes('amount') || t.includes('value');
+        });
+        let currIdx = headerCells.findIndex(c => {
+          let t = c.textContent.trim().toLowerCase();
+          return t === 'currency' || t === 'w currency' || t === 't currency' || t.includes('curr');
+        });
+
+        let withId = "";
+        let withVal = "";
+        let withCurr = "";
+        let withDate = "";
+
+        if (withdrawRow) {
+          if (idIdx !== -1 && withdrawRow.children.length > idIdx) {
+            withId = withdrawRow.children[idIdx].textContent.trim();
+          }
+          if (amountIdx !== -1 && withdrawRow.children.length > amountIdx) {
+            withVal = withdrawRow.children[amountIdx].textContent.trim();
+          }
+          if (currIdx !== -1 && withdrawRow.children.length > currIdx) {
+            withCurr = withdrawRow.children[currIdx].textContent.trim();
+          }
+          if (dateIdx !== -1 && withdrawRow.children.length > dateIdx) {
+            withDate = withdrawRow.children[dateIdx].textContent.trim();
+          }
+        }
+
+        depositInfo = { 
+          depOp: depOpName, 
+          withOp: withOpName, 
+          req: hasReq, 
+          ccDepCount: ccDepCount, 
+          ccVerInLog: ccVerInLog, 
+          depDate: depDate, 
+          prevWithDate: prevWithDate,
+          withId: withId,
+          withVal: withVal,
+          withCurr: withCurr,
+          withDate: withDate
+        };
         break;
       }
     }
@@ -141,7 +182,11 @@
       + "|CC_DEP_COUNT:" + depositInfo.ccDepCount
       + "|CC_VER:" + depositInfo.ccVerInLog
       + "|DEP_DATE:" + depositInfo.depDate
-      + "|PREV_WITH_DATE:" + depositInfo.prevWithDate;
+      + "|PREV_WITH_DATE:" + depositInfo.prevWithDate
+      + "|WITH_ID:" + (depositInfo.withId || "")
+      + "|WITH_VAL:" + (depositInfo.withVal || "")
+      + "|WITH_CURR:" + (depositInfo.withCurr || "")
+      + "|WITH_DATE:" + (depositInfo.withDate || "");
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');

@@ -40,24 +40,9 @@
     } catch(e){}
   }
 
-  function findPrevButton(doc) {
-    let els = Array.from(doc.querySelectorAll('*'));
-    let prev = els.reverse().find(e => {
-      if (['SCRIPT', 'STYLE', 'NOSCRIPT'].includes(e.tagName)) return false;
-      let t = e.textContent.trim().toLowerCase();
-      let v = (e.value || '').trim().toLowerCase();
-      return (t.includes('previous') || v.includes('previous')) && e.children.length === 0 && e.getBoundingClientRect().width > 0;
-    });
-    if (!prev) {
-      prev = Array.from(doc.querySelectorAll('button, a')).find(
-        e => e.textContent.toLowerCase().includes('previous') && e.getBoundingClientRect().width > 0
-      );
-    }
-    return prev;
-  }
-
   for (let doc of getFrames()) {
     if (!doc || !doc.body) continue;
+
     let tables = Array.from(doc.querySelectorAll('table'));
     for (let tbl of tables) {
       let ths = Array.from(tbl.querySelectorAll('th'));
@@ -73,8 +58,14 @@
       });
       if (!loginTh) continue;
 
+      // Check if table is Withdrawals To Confirm
+      let isWithdrawalsTable = ths.some(th => {
+        let t = th.textContent.trim().toLowerCase();
+        return t === 'operator' || t === 'operator name' || t === 'w value' || t === 'w currency';
+      });
+
       let idTh = ths.find(th => th.textContent.trim().toLowerCase() === 'id');
-      let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand');
+      let brandTh = ths.find(th => th.textContent.trim().toLowerCase() === 'brand' || th.textContent.trim().toLowerCase() === 'brand name');
       let wValueTh = ths.find(th => {
         let t = th.textContent.trim().toLowerCase();
         return t === 'w value' || t === 'value w currency' || t === 't value' || t === 'value';
@@ -93,6 +84,7 @@
         return t === 'operator' || t === 'operator name' || t === 'payment method';
       });
       let nameTh = ths.find(th => th.textContent.trim().toLowerCase() === 'name');
+      let cityTh = ths.find(th => th.textContent.trim().toLowerCase().includes('city'));
 
       let loginIdx = ths.indexOf(loginTh);
       let idIdx = idTh ? ths.indexOf(idTh) : -1;
@@ -103,11 +95,12 @@
       let walletIdIdx = walletIdTh ? ths.indexOf(walletIdTh) : -1;
       let opIdx = opTh ? ths.indexOf(opTh) : -1;
       let nameIdx = nameTh ? ths.indexOf(nameTh) : -1;
+      let cityIdx = cityTh ? ths.indexOf(cityTh) : -1;
 
       let trs = Array.from(tbl.querySelectorAll('tbody tr'));
       if (trs.length === 0) trs = Array.from(tbl.querySelectorAll('tr')).slice(1);
-      if (trs.length === 0) continue;
 
+      // Search through rows
       for (let tr of trs) {
         let rawLogin = loginIdx !== -1 && tr.children[loginIdx] ? tr.children[loginIdx].textContent : '';
         let rowEmail = '';
@@ -115,36 +108,132 @@
         if (m) rowEmail = m[0].trim().toLowerCase();
         else rowEmail = rawLogin.trim().toLowerCase();
 
-        if (rowEmail === targetEmail || rawLogin.toLowerCase().includes(targetEmail)) {
-          let foundId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
-          let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
-          let foundWValue = wValueIdx !== -1 && tr.children[wValueIdx] ? tr.children[wValueIdx].textContent.trim() : '';
-          let foundTCurr = tCurrIdx !== -1 && tr.children[tCurrIdx] ? tr.children[tCurrIdx].textContent.trim().toUpperCase() : 'PLN';
-          let foundDate = dateIdx !== -1 && tr.children[dateIdx] ? tr.children[dateIdx].textContent.trim() : '';
-          let foundWalletId = '';
-          if (walletIdIdx !== -1 && tr.children[walletIdIdx]) {
-            let wTd = tr.children[walletIdIdx];
-            let a = wTd.querySelector('a');
-            let href = a ? (a.getAttribute('href') || a.href || '') : '';
-            let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
-            if (hrefMatch) foundWalletId = hrefMatch[1].trim();
-            else foundWalletId = wTd.textContent.trim();
-          }
-          let foundOp = opIdx !== -1 && tr.children[opIdx] ? tr.children[opIdx].textContent.trim() : '';
-          let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+        let emailIdx = ths.findIndex(th => th.textContent.trim().toLowerCase() === 'email');
+        if (emailIdx !== -1 && tr.children[emailIdx]) {
+          let eText = tr.children[emailIdx].textContent.trim().toLowerCase();
+          if (eText && eText.includes('@')) rowEmail = eText;
+        }
 
+        if (rowEmail === targetEmail || rawLogin.toLowerCase().includes(targetEmail)) {
           tr.style.backgroundColor = '#d4edda';
-          let payload = 'FOUND|' + rowEmail + '|' + foundId + '|' + foundBrand + '|' + foundWValue + '|' + foundTCurr + '|' + foundDate + '|' + foundWalletId + '|' + foundOp + '|' + foundName;
-          copyToClipboard(payload, doc);
-          return;
+
+          if (isWithdrawalsTable) {
+            let foundId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
+            let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
+            let foundWValue = wValueIdx !== -1 && tr.children[wValueIdx] ? tr.children[wValueIdx].textContent.trim() : '';
+            let foundTCurr = tCurrIdx !== -1 && tr.children[tCurrIdx] ? tr.children[tCurrIdx].textContent.trim().toUpperCase() : 'PLN';
+            let foundDate = dateIdx !== -1 && tr.children[dateIdx] ? tr.children[dateIdx].textContent.trim() : '';
+            let foundWalletId = '';
+            if (walletIdIdx !== -1 && tr.children[walletIdIdx]) {
+              let wTd = tr.children[walletIdIdx];
+              let a = wTd.querySelector('a');
+              let href = a ? (a.getAttribute('href') || a.href || '') : '';
+              let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
+              if (hrefMatch) foundWalletId = hrefMatch[1].trim();
+              else foundWalletId = wTd.textContent.trim();
+            }
+            let foundOp = opIdx !== -1 && tr.children[opIdx] ? tr.children[opIdx].textContent.trim() : '';
+            let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+
+            let payload = 'FOUND_WITHDRAWAL|' + rowEmail + '|' + foundId + '|' + foundBrand + '|' + foundWValue + '|' + foundTCurr + '|' + foundDate + '|' + foundWalletId + '|' + foundOp + '|' + foundName;
+            copyToClipboard(payload, doc);
+            return;
+          } else {
+            let playerId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
+            let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
+            let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+            let foundCity = cityIdx !== -1 && tr.children[cityIdx] ? tr.children[cityIdx].textContent.trim() : '';
+
+            let aTags = Array.from(tr.querySelectorAll('a'));
+            let foundWalletId = '';
+            for (let a of aTags) {
+              let href = a.getAttribute('href') || a.href || '';
+              let hMatch = href.match(/admin\.user:([a-zA-Z0-9_-]+)/i);
+              if (hMatch) {
+                foundWalletId = hMatch[1].trim();
+                break;
+              }
+            }
+
+            let payload = 'FOUND_USERS_LIST|' + rowEmail + '|' + playerId + '|' + foundBrand + '|' + foundCity + '|' + foundWalletId + '|' + foundName;
+            copyToClipboard(payload, doc);
+            return;
+          }
         }
       }
 
-      // Check if we should try navigating previous page
-      let prevBtn = findPrevButton(doc);
-      if (prevBtn && !prevBtn.disabled && !prevBtn.classList.contains('disabled')) {
-        copyToClipboard('NOT_FOUND_TRY_PREV', doc);
-        return;
+      // If on Withdrawals table and not found in visible rows, try using the "Search login" filter!
+      if (isWithdrawalsTable) {
+        let loginInput = Array.from(doc.querySelectorAll('input')).find(i => {
+          let ph = (i.placeholder || '').toLowerCase();
+          return ph.includes('search login') || ph.includes('login');
+        });
+        if (loginInput) {
+          let curVal = loginInput.value.trim().toLowerCase();
+          if (curVal !== targetEmail) {
+            loginInput.value = targetEmail;
+            loginInput.dispatchEvent(new Event('input', { bubbles: true }));
+            loginInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            let genBtn = Array.from(doc.querySelectorAll('button, input[type="button"], a')).find(b => {
+              let t = (b.textContent || b.value || '').trim().toLowerCase();
+              return t === 'generate';
+            });
+            if (genBtn) {
+              genBtn.click();
+              copyToClipboard('FILTER_APPLIED', doc);
+              return;
+            }
+          } else {
+            // Already filtered by this email, but 0 results in table
+            copyToClipboard('NO_PENDING_WITHDRAWAL', doc);
+            return;
+          }
+        }
+      } else {
+        // If on Users list and not found in visible rows, filter by the dedicated 'Email' field!
+        let inputs = Array.from(doc.querySelectorAll('input'));
+        let emailInput = inputs.find(i => {
+          let ph = (i.placeholder || '').toLowerCase();
+          let nm = (i.name || '').toLowerCase();
+          return (ph.includes('email') || nm.includes('email')) && (i.offsetWidth > 0 || i.offsetHeight > 0);
+        });
+        if (!emailInput) {
+          let emailLabel = Array.from(doc.querySelectorAll('label, div, span, td')).find(e => {
+            let t = (e.textContent || '').trim().toLowerCase();
+            return (t === 'email' || t === 'email:') && e.children.length === 0;
+          });
+          if (emailLabel) {
+            let container = emailLabel.closest('.x-form-item, div, td, form') || emailLabel.parentElement;
+            if (container) emailInput = container.querySelector('input');
+          }
+        }
+        if (!emailInput) {
+          let visibleInputs = inputs.filter(i => (i.offsetWidth > 0 || i.offsetHeight > 0) && i.type !== 'button' && i.type !== 'submit');
+          if (visibleInputs.length >= 2) emailInput = visibleInputs[1];
+        }
+        if (emailInput) {
+          let curVal = emailInput.value.trim().toLowerCase();
+          if (curVal !== targetEmail) {
+            let s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            if (s) s.call(emailInput, targetEmail); else emailInput.value = targetEmail;
+            emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+            emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+            let searchBtn = Array.from(doc.querySelectorAll('button, input[type="button"], a')).find(b => {
+              let t = (b.textContent || b.value || '').trim().toLowerCase();
+              return t === 'search' && (b.offsetWidth > 0 || b.offsetHeight > 0);
+            });
+            if (searchBtn) {
+              searchBtn.click();
+              copyToClipboard('FILTER_APPLIED', doc);
+              return;
+            }
+          } else {
+            copyToClipboard('NOT_FOUND_ON_PAGE', doc);
+            return;
+          }
+        }
       }
     }
   }

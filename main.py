@@ -8,6 +8,13 @@ Primary entry point for Playbison & Data Studio Verification.
 """
 
 import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import time
 import subprocess
 import json
@@ -27,6 +34,11 @@ def run_cli_validation(targets: list):
     print("\n" + "=" * 60)
     print(f"CLI TARGET VALIDATION: {len(targets)} target(s) queued")
     print("=" * 60)
+    print("[START] Waiting 5 seconds... Release your mouse & keyboard!")
+    for sec in range(5, 0, -1):
+        print(f"Starting in {sec}s... ", end="\r", flush=True)
+        time.sleep(1.0)
+    print("Starting now!             \n")
 
     for idx, target in enumerate(targets, start=1):
         print(f"\n[{idx}/{len(targets)}] Processing Target: {target}")

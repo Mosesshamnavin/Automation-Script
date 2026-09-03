@@ -5,6 +5,14 @@ Modern Dark-Themed Desktop GUI for On-Demand Email / Withdrawal ID Verification.
 Bypasses historical table scans and directly validates user-specified Emails or IDs.
 """
 
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
@@ -46,7 +54,8 @@ class VerificationApp(tk.Tk):
         self.controller = QueueController(
             on_log=self._on_log_callback,
             on_status=self._on_status_callback,
-            on_queue_finished=self._on_queue_finished_callback
+            on_queue_finished=self._on_queue_finished_callback,
+            on_countdown=self._on_countdown_callback
         )
 
         # Tracking state
@@ -453,7 +462,7 @@ class VerificationApp(tk.Tk):
         self.btn_start.configure(state="disabled")
         self.btn_pause.configure(state="normal", text="⏸ Pause")
         self.btn_stop.configure(state="normal")
-        self._set_status_badge("PROCESSING", ACCENT_BLUE)
+        self._set_status_badge("STARTING (5s)", ACCENT_YELLOW)
 
         self.controller.start()
         self._update_stats_label()
@@ -514,6 +523,9 @@ class VerificationApp(tk.Tk):
     def _on_status_callback(self, target: str, data: Dict[str, Any]):
         self.msg_queue.put(("status", target, data))
 
+    def _on_countdown_callback(self, seconds_left: int):
+        self.msg_queue.put(("countdown", seconds_left))
+
     def _on_queue_finished_callback(self):
         self.msg_queue.put(("finished",))
 
@@ -531,6 +543,13 @@ class VerificationApp(tk.Tk):
                 elif msg_type == "status":
                     target, data = item[1], item[2]
                     self._update_row(target, data)
+
+                elif msg_type == "countdown":
+                    sec = item[1]
+                    if sec > 0:
+                        self._set_status_badge(f"STARTING ({sec}s)", ACCENT_YELLOW)
+                    elif sec == 0:
+                        self._set_status_badge("PROCESSING", ACCENT_BLUE)
 
                 elif msg_type == "finished":
                     self.btn_start.configure(state="normal")
