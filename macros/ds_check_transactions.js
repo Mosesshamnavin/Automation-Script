@@ -21,15 +21,29 @@
     if (typeof el.click === 'function') el.click();
   }
 
+  function closeDatePopups(doc) {
+    try {
+      let targetDoc = doc || document;
+      let popups = targetDoc.querySelectorAll('.datepicker, .datetimepicker, .bootstrap-datetimepicker-widget, .flatpickr-calendar, .ui-datepicker, [class*="datepicker"], [class*="calendar"], [class*="datetime"], .dropdown-menu');
+      popups.forEach(p => {
+        if (p.offsetWidth > 0 || p.offsetHeight > 0 || window.getComputedStyle(p).display !== 'none') {
+          p.style.display = 'none';
+        }
+      });
+      targetDoc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+      targetDoc.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', keyCode: 27, bubbles: true }));
+    } catch (e) {}
+  }
+
   function setVal(el, val) {
     if (!el) return;
-    try { el.focus(); } catch (e) {}
     let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     if (setter) setter.call(el, val); else el.value = val;
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('keyup', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
+    closeDatePopups(el.ownerDocument);
   }
 
   function setSelectVal(el, optionIndexOrVal) {
@@ -311,15 +325,16 @@
   function hasBlankInResults(container) {
     if (!container) return { found: false, date: null };
     let { tbl, idx } = findNoteColIdx(container);
-    if (!tbl || idx === -1) return { found: false, date: null };
+    if (!tbl) return { found: false, date: null };
 
     let allTrs = Array.from(tbl.querySelectorAll('tr'));
-    let dataRows = allTrs.filter(tr => tr.querySelector('td') && tr.children.length > Math.max(1, idx));
-
+    let dataRows = allTrs.filter(tr => tr.querySelector('td'));
     if (dataRows.length === 0) return { found: false, date: null };
 
     let dateIdx = 1;
+    let typeIdx = 3;
     let balBeforeIdx = -1, balAfterIdx = -1;
+    let bonBeforeIdx = -1, bonAfterIdx = -1;
 
     for (let tr of allTrs) {
       if (tr.querySelector('th')) {
@@ -327,26 +342,41 @@
         for (let i = 0; i < cells.length; i++) {
           let t = cells[i].textContent.toLowerCase().trim();
           if (t === 'date') dateIdx = i;
-          if (t === 'before' && i >= 10 && i < 13) balBeforeIdx = i;
-          if (t === 'after' && i >= 11 && i <= 13) balAfterIdx = i;
+          if (t === 'type') typeIdx = i;
+          if (t === 'before' && (i >= 9 && i <= 11)) balBeforeIdx = i;
+          if (t === 'after' && (i >= 10 && i <= 12)) balAfterIdx = i;
           if (t.includes('balance') && t.includes('before')) balBeforeIdx = i;
           if (t.includes('balance') && t.includes('after')) balAfterIdx = i;
+          if (t.includes('bonus') && t.includes('before')) bonBeforeIdx = i;
+          if (t.includes('bonus') && t.includes('after')) bonAfterIdx = i;
         }
         break;
       }
     }
 
-    if (balBeforeIdx === -1) balBeforeIdx = 11;
-    if (balAfterIdx === -1) balAfterIdx = 12;
+    if (balBeforeIdx === -1) balBeforeIdx = 10;
+    if (balAfterIdx === -1) balAfterIdx = 11;
+    if (bonBeforeIdx === -1) bonBeforeIdx = 12;
+    if (bonAfterIdx === -1) bonAfterIdx = 13;
+    let noteIdx = idx !== -1 ? idx : 15;
 
     for (let tr of dataRows) {
-      let txt = (tr.children[idx].textContent || '').trim().toLowerCase();
+      // 1. MUST verify row is a BONUS REDEMPTION!
+      let typeTxt = tr.children.length > typeIdx ? (tr.children[typeIdx].textContent || '').toLowerCase().trim() : '';
+      
+      // If the row is NOT a bonus redemption (e.g. STAKE, WIN, DEPOSIT, WITHDRAWAL), skip!
+      if (!typeTxt.includes('redeem') && !typeTxt.includes('bonus')) {
+        continue;
+      }
+
+      // 2. Check note column
+      let txt = (tr.children.length > noteIdx ? (tr.children[noteIdx].textContent || '') : '').trim().toLowerCase();
       // If note contains 'automatic', skip it (already verified automatic)
       if (txt.includes('automatic')) continue;
 
       let transValIdx = 4;
       let inValIdx = 6;
-      let outValIdx = 8;
+      let outValIdx = 7;
       
       let transVal = tr.children.length > transValIdx ? Math.abs(parseFloat(tr.children[transValIdx].textContent.trim().replace(',', '.')) || 0) : 0;
       let inVal = tr.children.length > inValIdx ? Math.abs(parseFloat(tr.children[inValIdx].textContent.trim().replace(',', '.')) || 0) : 0;
@@ -359,8 +389,8 @@
       let bAfter = parseFloat(balAfterStr.replace(',', '.')) || 0;
       let balChanged = (bBefore !== bAfter);
 
-      let bonBefore = tr.children.length > (balAfterIdx + 1) ? (parseFloat(tr.children[balAfterIdx + 1].textContent.trim().replace(',', '.')) || 0) : 0;
-      let bonAfter = tr.children.length > (balAfterIdx + 2) ? (parseFloat(tr.children[balAfterIdx + 2].textContent.trim().replace(',', '.')) || 0) : 0;
+      let bonBefore = tr.children.length > bonBeforeIdx ? (parseFloat(tr.children[bonBeforeIdx].textContent.trim().replace(',', '.')) || 0) : 0;
+      let bonAfter = tr.children.length > bonAfterIdx ? (parseFloat(tr.children[bonAfterIdx].textContent.trim().replace(',', '.')) || 0) : 0;
       let bonChanged = (bonBefore !== bonAfter) && (bonBefore > 0 || bonAfter > 0);
 
       // Check if this row is an inactive forfeiture/zero-change row where player received 0 funds
@@ -697,12 +727,16 @@
         setVal(amtInput, '');
       }
 
+      closeDatePopups(targetDoc || document);
+
       setTimeout(() => {
+        closeDatePopups(targetDoc || document);
         if (searchBtn) simClick(searchBtn);
 
+        // Wait 4.5 seconds for Redeem the bonuses search results to load
         setTimeout(() => {
           let freshDoc = getFrames()[0];
-          let freshModal = getActiveModalContainer(tTab, freshDoc);
+          let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
           let blankCheck = hasBlankInResults(freshModal);
           let blankFound = blankCheck.found;
           let blankDate = blankCheck.date;
@@ -739,8 +773,13 @@
               setVal(freshDateToInput, toVal);
             }
 
+            closeDatePopups(freshDoc || document);
+
             setTimeout(() => {
+              closeDatePopups(freshDoc || document);
               if (freshSearchBtn) simClick(freshSearchBtn);
+              
+              // Wait 4.5 seconds for Stack search results to load
               setTimeout(() => {
                 let liveDoc = getFrames()[0];
                 let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
@@ -757,14 +796,14 @@
                   let dateStr = blankDate ? `|STACK_DATE:${blankDate}` : "";
                   copyToClipboard("TRANS_RESULT:" + resText + dateStr);
                 });
-              }, 3000);
-            }, 500);
+              }, 4500);
+            }, 600);
           } else {
             copyToClipboard("TRANS_RESULT:AUTOMATIC");
           }
-        }, 3000);
+        }, 4500);
 
-      }, 600);
+      }, 800);
 
     }, 2000);
   } else {

@@ -15,6 +15,20 @@
     return frames;
   }
 
+  function closeDatePopups(doc) {
+    try {
+      let targetDoc = doc || document;
+      let popups = targetDoc.querySelectorAll('.datepicker, .datetimepicker, .bootstrap-datetimepicker-widget, .flatpickr-calendar, .ui-datepicker, [class*="datepicker"], [class*="calendar"], [class*="datetime"], .dropdown-menu');
+      popups.forEach(p => {
+        if (p.offsetWidth > 0 || p.offsetHeight > 0 || window.getComputedStyle(p).display !== 'none') {
+          p.style.display = 'none';
+        }
+      });
+      targetDoc.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+      targetDoc.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', keyCode: 27, bubbles: true }));
+    } catch (e) {}
+  }
+
   function setVal(input, val) {
     try {
       let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -23,6 +37,8 @@
     } catch(e) { input.value = val; }
     input.dispatchEvent(new Event('input', {bubbles: true}));
     input.dispatchEvent(new Event('change', {bubbles: true}));
+    input.dispatchEvent(new Event('blur', {bubbles: true}));
+    closeDatePopups(input.ownerDocument);
   }
 
   function simClick(el) {

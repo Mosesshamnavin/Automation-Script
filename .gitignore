@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 last_user.json
 completed_ids.json
+*.local.*
+*.local
+local_notes.*
+git_commands.*
