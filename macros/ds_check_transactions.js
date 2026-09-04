@@ -759,12 +759,10 @@
             if (freshAmtInput) setVal(freshAmtInput, searchAmt);
             if (freshAmtFromInput) setVal(freshAmtFromInput, '-10000');
             
-            if (freshDateInput && blankDate) {
-              let parsedDate = new Date(blankDate);
-              if (!isNaN(parsedDate.getTime())) {
-                let newVal = parsedDate.getFullYear() + "-" + String(parsedDate.getMonth() + 1).padStart(2, "0") + "-" + String(parsedDate.getDate()).padStart(2, "0") + " 00:00";
-                setVal(freshDateInput, newVal);
-              }
+            if (freshDateInput) {
+              let d = new Date(); d.setMonth(d.getMonth() - 1);
+              let newVal = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
+              setVal(freshDateInput, newVal);
             }
             if (freshDateToInput) {
               let now = new Date();

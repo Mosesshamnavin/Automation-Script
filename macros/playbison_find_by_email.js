@@ -101,6 +101,7 @@
       if (trs.length === 0) trs = Array.from(tbl.querySelectorAll('tr')).slice(1);
 
       // Search through rows
+      let matchingRows = [];
       for (let tr of trs) {
         let rawLogin = loginIdx !== -1 && tr.children[loginIdx] ? tr.children[loginIdx].textContent : '';
         let rowEmail = '';
@@ -115,50 +116,59 @@
         }
 
         if (rowEmail === targetEmail || rawLogin.toLowerCase().includes(targetEmail)) {
-          tr.style.backgroundColor = '#d4edda';
+          let brandText = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim().toLowerCase() : '';
+          matchingRows.push({ tr: tr, rowEmail: rowEmail, brand: brandText });
+        }
+      }
 
-          if (isWithdrawalsTable) {
-            let foundId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
-            let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
-            let foundWValue = wValueIdx !== -1 && tr.children[wValueIdx] ? tr.children[wValueIdx].textContent.trim() : '';
-            let foundTCurr = tCurrIdx !== -1 && tr.children[tCurrIdx] ? tr.children[tCurrIdx].textContent.trim().toUpperCase() : 'PLN';
-            let foundDate = dateIdx !== -1 && tr.children[dateIdx] ? tr.children[dateIdx].textContent.trim() : '';
-            let foundWalletId = '';
-            if (walletIdIdx !== -1 && tr.children[walletIdIdx]) {
-              let wTd = tr.children[walletIdIdx];
-              let a = wTd.querySelector('a');
-              let href = a ? (a.getAttribute('href') || a.href || '') : '';
-              let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
-              if (hrefMatch) foundWalletId = hrefMatch[1].trim();
-              else foundWalletId = wTd.textContent.trim();
-            }
-            let foundOp = opIdx !== -1 && tr.children[opIdx] ? tr.children[opIdx].textContent.trim() : '';
-            let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+      if (matchingRows.length > 0) {
+        // If multiple accounts found for this email, prefer 'bison casino'
+        let chosen = matchingRows.find(r => r.brand.includes('bison')) || matchingRows[0];
+        let tr = chosen.tr;
+        let rowEmail = chosen.rowEmail;
+        tr.style.backgroundColor = '#d4edda';
 
-            let payload = 'FOUND_WITHDRAWAL|' + rowEmail + '|' + foundId + '|' + foundBrand + '|' + foundWValue + '|' + foundTCurr + '|' + foundDate + '|' + foundWalletId + '|' + foundOp + '|' + foundName;
-            copyToClipboard(payload, doc);
-            return;
-          } else {
-            let playerId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
-            let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
-            let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
-            let foundCity = cityIdx !== -1 && tr.children[cityIdx] ? tr.children[cityIdx].textContent.trim() : '';
-
-            let aTags = Array.from(tr.querySelectorAll('a'));
-            let foundWalletId = '';
-            for (let a of aTags) {
-              let href = a.getAttribute('href') || a.href || '';
-              let hMatch = href.match(/admin\.user:([a-zA-Z0-9_-]+)/i);
-              if (hMatch) {
-                foundWalletId = hMatch[1].trim();
-                break;
-              }
-            }
-
-            let payload = 'FOUND_USERS_LIST|' + rowEmail + '|' + playerId + '|' + foundBrand + '|' + foundCity + '|' + foundWalletId + '|' + foundName;
-            copyToClipboard(payload, doc);
-            return;
+        if (isWithdrawalsTable) {
+          let foundId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
+          let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
+          let foundWValue = wValueIdx !== -1 && tr.children[wValueIdx] ? tr.children[wValueIdx].textContent.trim() : '';
+          let foundTCurr = tCurrIdx !== -1 && tr.children[tCurrIdx] ? tr.children[tCurrIdx].textContent.trim().toUpperCase() : 'PLN';
+          let foundDate = dateIdx !== -1 && tr.children[dateIdx] ? tr.children[dateIdx].textContent.trim() : '';
+          let foundWalletId = '';
+          if (walletIdIdx !== -1 && tr.children[walletIdIdx]) {
+            let wTd = tr.children[walletIdIdx];
+            let a = wTd.querySelector('a');
+            let href = a ? (a.getAttribute('href') || a.href || '') : '';
+            let hrefMatch = href.match(/admin\.user:([a-f0-9]+)/i);
+            if (hrefMatch) foundWalletId = hrefMatch[1].trim();
+            else foundWalletId = wTd.textContent.trim();
           }
+          let foundOp = opIdx !== -1 && tr.children[opIdx] ? tr.children[opIdx].textContent.trim() : '';
+          let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+
+          let payload = 'FOUND_WITHDRAWAL|' + rowEmail + '|' + foundId + '|' + foundBrand + '|' + foundWValue + '|' + foundTCurr + '|' + foundDate + '|' + foundWalletId + '|' + foundOp + '|' + foundName;
+          copyToClipboard(payload, doc);
+          return;
+        } else {
+          let playerId = idIdx !== -1 && tr.children[idIdx] ? tr.children[idIdx].textContent.trim() : '';
+          let foundBrand = brandIdx !== -1 && tr.children[brandIdx] ? tr.children[brandIdx].textContent.trim() : '';
+          let foundName = nameIdx !== -1 && tr.children[nameIdx] ? tr.children[nameIdx].textContent.trim() : '';
+          let foundCity = cityIdx !== -1 && tr.children[cityIdx] ? tr.children[cityIdx].textContent.trim() : '';
+
+          let aTags = Array.from(tr.querySelectorAll('a'));
+          let foundWalletId = '';
+          for (let a of aTags) {
+            let href = a.getAttribute('href') || a.href || '';
+            let hMatch = href.match(/admin\.user:([a-zA-Z0-9_-]+)/i);
+            if (hMatch) {
+              foundWalletId = hMatch[1].trim();
+              break;
+            }
+          }
+
+          let payload = 'FOUND_USERS_LIST|' + rowEmail + '|' + playerId + '|' + foundBrand + '|' + foundCity + '|' + foundWalletId + '|' + foundName;
+          copyToClipboard(payload, doc);
+          return;
         }
       }
 

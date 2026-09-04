@@ -422,17 +422,40 @@ class VerificationApp(tk.Tk):
         raw = self.txt_ids.get("1.0", "end").strip()
         if not raw:
             return []
-        tokens = re.split(r"[\r\n,;\s]+", raw)
+        
         valid_targets = []
-        for t in tokens:
-            t_clean = t.strip()
-            if not t_clean:
+        lines = raw.splitlines()
+        for line in lines:
+            line_clean = line.strip()
+            if not line_clean:
                 continue
-            # Accept valid email (contains @ and .) OR valid numeric ID (>= 4 digits)
-            is_email = "@" in t_clean and "." in t_clean
-            is_id = t_clean.isdigit() and len(t_clean) >= 4
-            if (is_email or is_id) and t_clean not in valid_targets:
-                valid_targets.append(t_clean)
+
+            # 1. If line contains a 7-digit withdrawal ID (e.g. 6278139), use it directly!
+            w_id_match = re.search(r'\b(6\d{6})\b', line_clean)
+            if w_id_match:
+                wid = w_id_match.group(1)
+                if wid not in valid_targets:
+                    valid_targets.append(wid)
+                continue
+
+            # 2. If line contains an email address
+            em_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', line_clean)
+            if em_match:
+                em = em_match.group(0).lower()
+                if em not in valid_targets:
+                    valid_targets.append(em)
+                continue
+
+            # 3. Fallback: tokenize line by commas or spaces for standalone IDs or emails
+            for t in re.split(r"[\r\n,;\s]+", line_clean):
+                t_clean = t.strip()
+                if not t_clean:
+                    continue
+                is_email = "@" in t_clean and "." in t_clean
+                is_id = t_clean.isdigit() and len(t_clean) >= 4
+                if (is_email or is_id) and t_clean not in valid_targets:
+                    valid_targets.append(t_clean)
+
         return valid_targets
 
     def _on_start_clicked(self):
