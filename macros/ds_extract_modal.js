@@ -17,6 +17,20 @@
       return docs;
     }
 
+    function copyToClipboard(text, targetDoc) {
+      try {
+        let d = targetDoc || document;
+        let ta = d.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0.01';
+        (d.body || document.body).appendChild(ta);
+        ta.select();
+        d.execCommand('copy');
+        ta.remove();
+      } catch(e){}
+    }
+
     function normStr(s) {
       if (!s) return '';
       return s.normalize('NFD')
@@ -71,9 +85,21 @@
         });
       }
 
-      // 3. Fallback: only if NEITHER targetId nor targetEmail was specified, use the topmost container
-      if (!activeContainer && !targetId && !targetEmail && visibleContainers.length > 0) {
-        activeContainer = visibleContainers[visibleContainers.length - 1];
+      // 3. Fallback to topmost visible container if it doesn't conflict with target
+      if (!activeContainer && visibleContainers.length > 0) {
+        let candidate = visibleContainers[visibleContainers.length - 1];
+        let cTxt = (candidate.innerText || candidate.textContent || '').toLowerCase();
+        let hasWrongEmail = targetEmail && cTxt.includes('@') && !cTxt.includes(targetEmail.toLowerCase());
+        let hasWrongId = false;
+        if (targetId) {
+          let idMatches = cTxt.match(/\b(6\d{6})\b/g);
+          if (idMatches && !idMatches.includes(targetId)) {
+            hasWrongId = true;
+          }
+        }
+        if (!hasWrongEmail && !hasWrongId) {
+          activeContainer = candidate;
+        }
       }
 
       if (!activeContainer) {
@@ -118,7 +144,8 @@
       }
 
       if (op.includes('COINSPAID')) {
-        prompt('RESULT:', 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal);
+        let cres = 'COINSPAID_SKIP|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal;
+        copyToClipboard(cres, doc);
         return;
       }
 
@@ -185,32 +212,12 @@
       let tpFlag = isThirdParty ? "YES" : "NO";
       let resPrefix = isThirdParty ? ("NAMEFAIL:" + (cleanAccHolder || (fn + ' ' + ln))) : (acc || directIban || 'OK');
       let fullRes = resPrefix + '|WALLET:' + wid + '|FN:' + fn + '|LN:' + ln + '|CITY:' + city + '|OP:' + op + '|ACCHOLDER:' + cleanAccHolder + '|THIRDPARTY:' + tpFlag + '|GB_IBAN:' + gbFlag + '|EMAIL:' + emailVal + '|BRAND:' + brandVal + '|WVAL:' + wValueVal + '|CURR:' + tCurrVal;
-      try {
-        let ta = doc.createElement('textarea');
-        ta.value = fullRes;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0.01';
-        (doc.body || document.body).appendChild(ta);
-        ta.select();
-        doc.execCommand('copy');
-        ta.remove();
-      } catch(e){}
-      try { prompt(isThirdParty ? 'MISMATCH:' : 'RESULT:', fullRes); } catch(e){}
+      copyToClipboard(fullRes, doc);
       return;
     }
 
-    try {
-      let ta = document.createElement('textarea');
-      ta.value = 'NOTFOUND|WALLET:';
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0.01';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    } catch(e){}
-    try { prompt('ERROR:', 'NOTFOUND|WALLET:'); } catch(e){}
+    copyToClipboard('NOTFOUND|WALLET:', document);
   } catch (e) {
-    try { prompt('ERROR:', 'NOTFOUND|WALLET:'); } catch(e){}
+    copyToClipboard('NOTFOUND|WALLET:', document);
   }
 })();

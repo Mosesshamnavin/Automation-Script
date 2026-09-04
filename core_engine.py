@@ -34,6 +34,21 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
         if on_log:
             on_log(f"[PLAYBISON] Navigating to Users list page (#action:admin.users) for: {email}...")
 
+        def _nav_back_to_withdrawals():
+            try:
+                js_nav = load_macro("playbison_navigate.js")
+                pyperclip.copy(js_nav)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                time.sleep(1.2)
+            except Exception:
+                pass
+
         # Focus Playbison Tab 1 and dismiss any open prompt dialogs
         pyautogui.hotkey('ctrl', '1')
         time.sleep(0.3)
@@ -80,6 +95,7 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                 }
                 if on_log:
                     on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | City: {data['city']} | Wallet: {data['wallet_id']}")
+                _nav_back_to_withdrawals()
                 return data
 
             elif res == "FILTER_APPLIED":
@@ -112,6 +128,7 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                         }
                         if on_log:
                             on_log(f"[PLAYBISON] Found player in Users list! ID: {data['player_id']} | Player: {data['name']} | City: {data['city']} | Wallet: {data['wallet_id']}")
+                        _nav_back_to_withdrawals()
                         return data
                     elif res_f.startswith("FOUND_WITHDRAWAL|"):
                         parts = res_f.split("|")
@@ -128,6 +145,7 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                         }
                         if on_log:
                             on_log(f"[PLAYBISON] Found player! ID: {data['id']} | Player: {data['name']}")
+                        _nav_back_to_withdrawals()
                         return data
                     elif res_f in ("NO_PENDING_WITHDRAWAL", "NOT_FOUND_ON_PAGE"):
                         break
@@ -148,6 +166,7 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
                 }
                 if on_log:
                     on_log(f"[PLAYBISON] Found withdrawal! ID: {data['id']} | Player: {data['name']} | Wallet: {data['wallet_id']}")
+                _nav_back_to_withdrawals()
                 return data
 
             elif res in ("NOT_FOUND_ON_PAGE", "NO_PENDING_WITHDRAWAL"):
@@ -156,6 +175,7 @@ def resolve_email_in_playbison(email: str, on_log: Optional[Callable[[str], None
     except Exception as e:
         if on_log:
             on_log(f"[PLAYBISON] Note: Users list pre-scan error ({e}). Proceeding to direct verification.")
+    _nav_back_to_withdrawals()
     return None
 
 
@@ -193,24 +213,32 @@ class VerificationEngine:
 
     def verify_target(
         self,
-        target: str,
+        target: Any,
         on_log: Optional[Callable[[str], None]] = None,
-        on_status: Optional[Callable[[str, Dict[str, Any]], None]] = None
+        on_status: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+        email: Optional[str] = None,
+        brand: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Verify a single target (Email or Withdrawal ID).
+        Verify a single target (Email, Withdrawal ID, or dict with target/id/email/brand).
         """
         self._is_stopped = False
-        target_clean = str(target).strip()
+        target_dict = target if isinstance(target, dict) else {}
+        target_clean = str(target_dict.get("target") or target_dict.get("id") or target_dict.get("email") or target).strip()
         is_email = "@" in target_clean
+
+        explicit_id = target_dict.get("id") or (target_clean if (not is_email and target_clean.isdigit()) else "")
+        explicit_email = target_dict.get("email") or (target_clean if is_email else email or "")
+        explicit_brand = target_dict.get("brand") or brand or "bison casino"
 
         result_data: Dict[str, Any] = {
             "target": target_clean,
-            "id": target_clean if not is_email else "",
+            "id": explicit_id or (target_clean if not is_email else ""),
             "player_name": "",
             "player_id": "",
             "wallet_id": "",
-            "email": target_clean if is_email else "",
+            "email": explicit_email,
+            "brand": explicit_brand,
             "wd_ratio": "",
             "stack_pln": "",
             "duplicate": "NO",
@@ -224,9 +252,9 @@ class VerificationEngine:
 
         # Always initialize a clean session state for this target so previous target's data NEVER leaks
         initial_cache = {
-            "email": target_clean if is_email else "",
-            "id": target_clean if not is_email else "",
-            "brand": "bison casino",
+            "email": explicit_email,
+            "id": explicit_id,
+            "brand": explicit_brand,
             "w_value": "",
             "t_curr": "PLN",
             "id_date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -240,9 +268,9 @@ class VerificationEngine:
         except Exception:
             pass
 
-        # If it's an email, pre-scan table to grab withdrawal id and player details if present
+        # If it's an email and no explicit_id provided, pre-scan table to grab withdrawal id and player details if present
         found_id = None
-        if is_email:
+        if is_email and not explicit_id:
             row_data = resolve_email_in_playbison(target_clean, on_log=on_log)
             if row_data:
                 withdrawal_id = row_data.get("id", "")
@@ -254,7 +282,7 @@ class VerificationEngine:
                     result_data["player_name"] = pname
                 result_data["wallet_id"] = row_data.get("wallet_id", "")
                 result_data["city"] = row_data.get("city", "")
-                result_data["brand"] = row_data.get("brand", "bison casino")
+                result_data["brand"] = row_data.get("brand", explicit_brand)
                 row_data["email"] = target_clean
                 try:
                     with open("last_user.json", "w", encoding="utf-8") as f:
@@ -271,12 +299,20 @@ class VerificationEngine:
             "--auto"
         ]
 
-        if is_email:
-            cmd.extend(["--email", target_clean])
-            if found_id:
-                cmd.extend(["--id", found_id])
-        else:
+        if explicit_id:
+            cmd.extend(["--id", explicit_id])
+        elif not is_email:
             cmd.extend(["--id", target_clean])
+        elif found_id:
+            cmd.extend(["--id", found_id])
+
+        if explicit_email:
+            cmd.extend(["--email", explicit_email])
+        elif is_email:
+            cmd.extend(["--email", target_clean])
+
+        if explicit_brand:
+            cmd.extend(["--brand", explicit_brand])
 
         if on_log:
             on_log(f"[ENGINE] Starting verification for: {target_clean}")
@@ -338,7 +374,29 @@ class VerificationEngine:
                             on_status(target_clean, result_data)
 
                 # 3. Wallet ID
-                if "wallet_id from table scan:" in line_str or "wallet_id in new tab:" in line_str:
+                if "Successfully resolved via Users list with Email & Brand!" in line_str:
+                    m_wid = re.search(r"Wallet:\s*([a-f0-9]+)", line_str, re.I)
+                    if m_wid:
+                        result_data["wallet_id"] = m_wid.group(1).strip()
+                    m_nm = re.search(r"Name:\s*([^|]+)", line_str)
+                    if m_nm:
+                        nm = m_nm.group(1).strip()
+                        if nm and not nm.startswith("{"):
+                            result_data["player_name"] = nm
+                    m_ct = re.search(r"City:\s*([^|]+)", line_str)
+                    if m_ct:
+                        ct = m_ct.group(1).strip()
+                        if ct:
+                            result_data["city"] = ct
+                    m_br = re.search(r"Brand:\s*([^|]+)", line_str)
+                    if m_br:
+                        br = m_br.group(1).strip()
+                        if br:
+                            result_data["brand"] = br
+                    if on_status:
+                        on_status(target_clean, result_data)
+
+                elif "wallet_id from table scan:" in line_str or "wallet_id in new tab:" in line_str:
                     m = re.search(r"(?:wallet_id|admin\.user):([a-f0-9]{15,})", line_str)
                     if m:
                         result_data["wallet_id"] = m.group(1).strip()
@@ -459,11 +517,16 @@ class QueueController:
         self._thread: Optional[threading.Thread] = None
         self._is_running = False
 
-    def add_targets(self, targets: List[str]):
+    def add_targets(self, targets: List[Any]):
         for t in targets:
-            clean = str(t).strip()
-            if clean and clean not in self.queue:
-                self.queue.append(clean)
+            if isinstance(t, dict):
+                key = t.get("target") or t.get("id") or t.get("email")
+                if key and not any((isinstance(q, dict) and (q.get("target") == key or q.get("id") == key)) or q == key for q in self.queue):
+                    self.queue.append(t)
+            else:
+                clean = str(t).strip()
+                if clean and clean not in self.queue:
+                    self.queue.append(clean)
 
     def add_ids(self, ids: List[str]):
         self.add_targets(ids)
@@ -523,9 +586,10 @@ class QueueController:
                     break
 
                 target = self.queue.pop(0)
+                display_target = (target.get("target") or target.get("id") or target.get("email")) if isinstance(target, dict) else str(target).strip()
                 if self.on_log:
                     self.on_log(f"\n============================================================")
-                    self.on_log(f"[QUEUE] Next Target: {target} ({len(self.queue)} remaining)")
+                    self.on_log(f"[QUEUE] Next Target: {display_target} ({len(self.queue)} remaining)")
                     self.on_log(f"============================================================")
 
                 res = self.engine.verify_target(

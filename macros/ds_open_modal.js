@@ -26,7 +26,8 @@
     }
   }
 
-  // 2. Set the window hash to trigger details modal
+
+  // 3. Set the window hash to trigger details modal
   if (id && !id.startsWith('###')) {
     if (window.location.hash === '#action:admin.payment.details:' + id) {
       window.location.hash = '#action:admin.payment.details:' + id + '_toggle';

@@ -101,6 +101,21 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
     pyautogui.press('escape')
     time.sleep(0.3)
 
+    # Restore Tab 1 to Withdrawals to Confirm table
+    try:
+        js_nav_back = load_macro("playbison_navigate.js")
+        pyperclip.copy(js_nav_back)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.2)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.2)
+        pyautogui.press('enter')
+        time.sleep(0.8)
+    except Exception:
+        pass
+
 
 def main():
     print("============================================================")
@@ -163,6 +178,16 @@ def main():
         except Exception:
             pass
 
+    custom_brand = None
+    if "--brand" in sys.argv:
+        try:
+            b_idx = sys.argv.index("--brand") + 1
+            if b_idx < len(sys.argv):
+                custom_brand = sys.argv[b_idx].strip()
+                player_brand = custom_brand
+        except Exception:
+            pass
+
     city = ""
     if os.path.exists("last_user.json"):
         try:
@@ -216,6 +241,9 @@ def main():
             id_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         else:
             player_id = custom_id
+
+    if custom_brand:
+        player_brand = custom_brand
             
     # Step A & B: If player_id is provided, open modal via hash navigation & extract details
     verify_raw = ""
@@ -229,7 +257,10 @@ def main():
     is_withdrawal_id = bool(player_id and len(player_id) >= 7 and player_id.startswith("6"))
     if player_id and (is_withdrawal_id or not custom_email):
         pyautogui.hotkey('ctrl', '1')
-        time.sleep(0.5)
+        time.sleep(0.4)
+        # Dismiss any leftover dialog or modal
+        pyautogui.press('enter')
+        time.sleep(0.2)
         pyautogui.press('escape')
         time.sleep(0.3)
         
@@ -247,7 +278,7 @@ def main():
         time.sleep(3.5)
         
         js_extract_macro = load_macro("ds_extract_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email, PLAYER_NAME=player_name)
-        pyperclip.copy("WAITING_FOR_PROMPT")
+        pyperclip.copy("WAITING_FOR_RESULT")
         pyperclip.copy(js_extract_macro)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
@@ -257,21 +288,12 @@ def main():
         time.sleep(0.3)
         pyautogui.press('enter')
         
-        for _ in range(6):
-            time.sleep(0.8)
-            pyautogui.hotkey('ctrl', 'c')
-            time.sleep(0.3)
+        for _ in range(8):
+            time.sleep(0.5)
             clip_val = pyperclip.paste().strip()
-            if clip_val and clip_val != "WAITING_FOR_PROMPT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
+            if clip_val and clip_val != "WAITING_FOR_RESULT" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
                 verify_raw = clip_val
-                pyautogui.press('enter')
-                time.sleep(0.2)
-                pyautogui.press('escape')
                 break
-        else:
-            pyautogui.press('enter')
-            time.sleep(0.2)
-            pyautogui.press('escape')
     
     # Chrome prompt() Ctrl+C copies the INPUT FIELD value only, not the label.
     # Format: "maskedAccount_value|WALLET:hexId"  or  "NAMEFAIL:first last|WALLET:hexId"
@@ -383,6 +405,148 @@ def main():
     if modal_curr:
         t_curr = modal_curr
 
+    # ---------------------------------------------------------
+    # Fallback to searching by Email and Brand in Users list if modal search failed
+    # ---------------------------------------------------------
+    if (not wallet_id or verify_raw.startswith("NOTFOUND") or "NOTFOUND" in verify_raw) and player_email:
+        print(f"\n[PLAYBISON] ⚠️ ID '{player_id}' not found via Payment Details modal ({verify_raw or 'no wallet'}).")
+        print(f"[PLAYBISON] Falling back to searching by Email '{player_email}' and Brand '{player_brand}' in Users list (#action:admin.users)...")
+        
+        pyautogui.hotkey('ctrl', '1')
+        time.sleep(0.3)
+        pyautogui.press('escape')
+        time.sleep(0.2)
+        
+        # Navigate Tab 1 to Users list
+        js_nav_users = load_macro("playbison_nav_users.js")
+        pyperclip.copy(js_nav_users)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        time.sleep(4.0)
+        
+        # Search Users list with Email and Brand
+        js_find_macro = load_macro("playbison_find_by_email.js", TARGET_EMAIL=player_email, TARGET_BRAND=player_brand)
+        pyperclip.copy("WAITING_FOR_FIND")
+        pyperclip.copy(js_find_macro)
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.3)
+        pyautogui.write('javascript:')
+        time.sleep(0.2)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.3)
+        pyautogui.press('enter')
+        
+        found_profile = None
+        for _ in range(8):
+            time.sleep(0.5)
+            c_res = pyperclip.paste().strip()
+            if c_res.startswith("FOUND_USERS_LIST|"):
+                parts = c_res.split("|")
+                found_profile = {
+                    "email": parts[1] if len(parts) > 1 else player_email,
+                    "player_id": parts[2] if len(parts) > 2 else "",
+                    "brand": parts[3] if len(parts) > 3 else player_brand,
+                    "city": parts[4].split("(")[0].strip() if len(parts) > 4 else "",
+                    "wallet_id": parts[5] if len(parts) > 5 else "",
+                    "name": parts[6] if len(parts) > 6 else ""
+                }
+                break
+            elif c_res == "FILTER_APPLIED":
+                print(f"[PLAYBISON] Applied Email filter for '{player_email}'. Waiting 3.5s for table reload...")
+                time.sleep(3.5)
+                # Re-inject and read
+                pyperclip.copy("WAITING_FOR_FIND")
+                pyperclip.copy(js_find_macro)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                for _ in range(8):
+                    time.sleep(0.5)
+                    c_res2 = pyperclip.paste().strip()
+                    if c_res2.startswith("FOUND_USERS_LIST|"):
+                        parts = c_res2.split("|")
+                        found_profile = {
+                            "email": parts[1] if len(parts) > 1 else player_email,
+                            "player_id": parts[2] if len(parts) > 2 else "",
+                            "brand": parts[3] if len(parts) > 3 else player_brand,
+                            "city": parts[4].split("(")[0].strip() if len(parts) > 4 else "",
+                            "wallet_id": parts[5] if len(parts) > 5 else "",
+                            "name": parts[6] if len(parts) > 6 else ""
+                        }
+                        break
+                    elif c_res2.startswith("FOUND_WITHDRAWAL|"):
+                        parts = c_res2.split("|")
+                        found_profile = {
+                            "email": parts[1] if len(parts) > 1 else player_email,
+                            "withdrawal_id": parts[2] if len(parts) > 2 else "",
+                            "brand": parts[3] if len(parts) > 3 else player_brand,
+                            "w_value": parts[4] if len(parts) > 4 else "",
+                            "t_curr": parts[5] if len(parts) > 5 else "PLN",
+                            "id_date": parts[6] if len(parts) > 6 else "",
+                            "wallet_id": parts[7] if len(parts) > 7 else "",
+                            "operator": parts[8] if len(parts) > 8 else "",
+                            "name": parts[9] if len(parts) > 9 else ""
+                        }
+                        break
+                    elif c_res2 in ("NOT_FOUND_ON_PAGE", "NO_PENDING_WITHDRAWAL"):
+                        break
+                break
+            elif c_res.startswith("FOUND_WITHDRAWAL|"):
+                parts = c_res.split("|")
+                found_profile = {
+                    "email": parts[1] if len(parts) > 1 else player_email,
+                    "withdrawal_id": parts[2] if len(parts) > 2 else "",
+                    "brand": parts[3] if len(parts) > 3 else player_brand,
+                    "w_value": parts[4] if len(parts) > 4 else "",
+                    "t_curr": parts[5] if len(parts) > 5 else "PLN",
+                    "id_date": parts[6] if len(parts) > 6 else "",
+                    "wallet_id": parts[7] if len(parts) > 7 else "",
+                    "operator": parts[8] if len(parts) > 8 else "",
+                    "name": parts[9] if len(parts) > 9 else ""
+                }
+                break
+            elif c_res in ("NOT_FOUND_ON_PAGE", "NO_PENDING_WITHDRAWAL"):
+                break
+
+        if found_profile:
+            if found_profile.get("wallet_id"):
+                wallet_id = found_profile["wallet_id"]
+                saved_wid = wallet_id
+            if found_profile.get("city"):
+                city = found_profile["city"]
+            if found_profile.get("brand"):
+                player_brand = found_profile["brand"]
+            if found_profile.get("player_id") and found_profile["player_id"].isdigit():
+                true_player_id = found_profile["player_id"]
+            if found_profile.get("name") and not found_profile["name"].startswith("{"):
+                player_name = found_profile["name"]
+                true_player_name = found_profile["name"]
+                p_parts = player_name.strip().split(None, 1)
+                fn = p_parts[0]
+                ln = p_parts[1] if len(p_parts) > 1 else ""
+            if found_profile.get("w_value"):
+                w_value = found_profile["w_value"]
+            if found_profile.get("t_curr"):
+                t_curr = found_profile["t_curr"]
+            if found_profile.get("id_date"):
+                id_date = found_profile["id_date"]
+            if found_profile.get("operator"):
+                playbison_op = found_profile["operator"]
+            
+            verify_raw = f"RESOLVED_USERS_LIST|WALLET:{wallet_id}|NAME:{true_player_name}|BRAND:{player_brand}"
+            print(f"[PLAYBISON] Successfully resolved via Users list with Email & Brand! Wallet: {wallet_id} | Name: {player_name} | City: {city} | Brand: {player_brand}")
+        else:
+            print(f"[PLAYBISON] Target '{player_email}' ({player_brand}) could not be found in Users list.")
+
     # Safety guard: PAYSAFECARD, SKRILL, COINSPAID, or null/empty account holder is never third party
     op_upper = playbison_op.upper() if playbison_op else ""
     if any(k in op_upper for k in ["PAYSAFECARD", "PAYSAFE", "SKRILL", "COINSPAID"]) or modal_account_holder.lower() in ["", "null", "undefined"]:
@@ -467,16 +631,11 @@ def main():
         
         dup_res = ""
         for _ in range(12):
-            time.sleep(1.0)
-            pyautogui.hotkey('ctrl', 'c')
-            time.sleep(0.3)
+            time.sleep(0.8)
             clip_val = pyperclip.paste().strip()
-            if clip_val and clip_val != "WAITING_FOR_DUP" and not clip_val.startswith("(function") and not clip_val.startswith("javascript:"):
+            if clip_val in ("YES", "NO"):
                 dup_res = clip_val
-                pyautogui.press('enter')
                 break
-        else:
-            pyautogui.press('enter')
             
         if dup_res == "YES":
             print(f"\n\n{'='*60}\n[WARNING] MULTIPLE ACCOUNTS FOUND FOR {fn} {ln}!!!\n{'='*60}\n")
@@ -559,6 +718,11 @@ def main():
     
     if not player_email or player_email == "NOTFOUND":
         print(f"\n[PLAYBISON] ❌ Target '{player_id}' could not be resolved (not found on this platform). Skipping to next target...")
+        cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
+        return
+
+    if verify_raw.startswith("NOTFOUND") and not wallet_id:
+        print(f"\n[PLAYBISON] ❌ Target '{player_id}' could not be found on this platform (no modal/wallet). Skipping to next target...")
         cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
         return
 

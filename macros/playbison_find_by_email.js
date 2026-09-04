@@ -1,8 +1,10 @@
 // Dynamic placeholder:
 //   ###TARGET_EMAIL### -> the target email to find in the table
+//   ###TARGET_BRAND### -> optional target brand (e.g. fireball, meteoro, bison casino)
 
 (function () {
   let targetEmail = '###TARGET_EMAIL###'.toLowerCase().trim();
+  let targetBrand = '###TARGET_BRAND###'.toLowerCase().trim();
 
   function getFrames() {
     let docs = [document];
@@ -122,8 +124,15 @@
       }
 
       if (matchingRows.length > 0) {
-        // If multiple accounts found for this email, prefer 'bison casino'
-        let chosen = matchingRows.find(r => r.brand.includes('bison')) || matchingRows[0];
+        // If multiple accounts found for this email, match targetBrand if specified
+        let chosen = null;
+        if (targetBrand && !targetBrand.startsWith('###')) {
+          let tb = targetBrand.replace('casino', '').trim();
+          chosen = matchingRows.find(r => r.brand.includes(targetBrand) || (tb && r.brand.includes(tb)) || (tb && targetBrand.includes(r.brand)));
+        }
+        if (!chosen) {
+          chosen = matchingRows.find(r => r.brand.includes('bison')) || matchingRows[0];
+        }
         let tr = chosen.tr;
         let rowEmail = chosen.rowEmail;
         tr.style.backgroundColor = '#d4edda';
@@ -164,6 +173,10 @@
               foundWalletId = hMatch[1].trim();
               break;
             }
+          }
+          if (!foundWalletId) {
+            let m = tr.innerHTML.match(/admin\.user:([a-zA-Z0-9_-]+)/i);
+            if (m) foundWalletId = m[1].trim();
           }
 
           let payload = 'FOUND_USERS_LIST|' + rowEmail + '|' + playerId + '|' + foundBrand + '|' + foundCity + '|' + foundWalletId + '|' + foundName;
@@ -229,13 +242,18 @@
             if (s) s.call(emailInput, targetEmail); else emailInput.value = targetEmail;
             emailInput.dispatchEvent(new Event('input', { bubbles: true }));
             emailInput.dispatchEvent(new Event('change', { bubbles: true }));
+            emailInput.dispatchEvent(new Event('blur', { bubbles: true }));
 
-            let searchBtn = Array.from(doc.querySelectorAll('button, input[type="button"], a')).find(b => {
+            let searchBtns = Array.from(doc.querySelectorAll('button, input[type="button"], a, div[role="button"]')).filter(b => {
               let t = (b.textContent || b.value || '').trim().toLowerCase();
-              return t === 'search' && (b.offsetWidth > 0 || b.offsetHeight > 0);
+              return t === 'search' && (b.offsetWidth > 0 || b.offsetHeight > 0 || b.getBoundingClientRect().width > 0);
             });
-            if (searchBtn) {
-              searchBtn.click();
+            if (searchBtns.length > 0) {
+              let btn = searchBtns[0];
+              btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+              btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              try { btn.click(); } catch(e){}
               copyToClipboard('FILTER_APPLIED', doc);
               return;
             }

@@ -32,7 +32,6 @@
       ta.select();
       try { document.execCommand('copy'); } catch(e){}
       try { navigator.clipboard.writeText(text); } catch(e){}
-      try { prompt('BONUS_RESULT:', text); } catch(e){}
     } catch (e) {}
   }
 

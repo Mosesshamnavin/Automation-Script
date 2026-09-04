@@ -418,32 +418,48 @@ class VerificationApp(tk.Tk):
 
     # --- Actions & Handlers ---
 
-    def _parse_input_targets(self) -> List[str]:
+    def _parse_input_targets(self) -> List[Dict[str, str]]:
         raw = self.txt_ids.get("1.0", "end").strip()
         if not raw:
             return []
         
         valid_targets = []
+        seen_keys = set()
         lines = raw.splitlines()
         for line in lines:
             line_clean = line.strip()
             if not line_clean:
                 continue
 
-            # 1. If line contains a 7-digit withdrawal ID (e.g. 6278139), use it directly!
+            # Detect brand if specified in the line
+            brand_name = "bison casino"
+            for b in ["bison casino", "fireball", "meteoro", "bison"]:
+                if b in line_clean.lower():
+                    brand_name = "bison casino" if "bison" in b else b
+                    break
+
+            # 1. 7-digit withdrawal ID (e.g. 6278139)
+            wid = ""
             w_id_match = re.search(r'\b(6\d{6})\b', line_clean)
             if w_id_match:
                 wid = w_id_match.group(1)
-                if wid not in valid_targets:
-                    valid_targets.append(wid)
-                continue
 
-            # 2. If line contains an email address
+            # 2. Email address
+            em = ""
             em_match = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', line_clean)
             if em_match:
                 em = em_match.group(0).lower()
-                if em not in valid_targets:
-                    valid_targets.append(em)
+
+            if wid or em:
+                primary_key = wid if wid else em
+                if primary_key not in seen_keys:
+                    seen_keys.add(primary_key)
+                    valid_targets.append({
+                        "target": primary_key,
+                        "id": wid,
+                        "email": em,
+                        "brand": brand_name
+                    })
                 continue
 
             # 3. Fallback: tokenize line by commas or spaces for standalone IDs or emails
@@ -453,8 +469,14 @@ class VerificationApp(tk.Tk):
                     continue
                 is_email = "@" in t_clean and "." in t_clean
                 is_id = t_clean.isdigit() and len(t_clean) >= 4
-                if (is_email or is_id) and t_clean not in valid_targets:
-                    valid_targets.append(t_clean)
+                if (is_email or is_id) and t_clean not in seen_keys:
+                    seen_keys.add(t_clean)
+                    valid_targets.append({
+                        "target": t_clean,
+                        "id": t_clean if is_id else "",
+                        "email": t_clean if is_email else "",
+                        "brand": brand_name
+                    })
 
         return valid_targets
 
@@ -467,15 +489,16 @@ class VerificationApp(tk.Tk):
             )
             return
 
-        for idx, target in enumerate(targets, start=len(self.item_row_ids) + 1):
-            if target not in self.item_row_ids:
+        for idx, item in enumerate(targets, start=len(self.item_row_ids) + 1):
+            target_key = item["target"]
+            if target_key not in self.item_row_ids:
                 row_id = self.tree.insert(
                     "",
                     "end",
-                    values=(idx, target, "...", "...", "...", "...", "Queued"),
+                    values=(idx, target_key, "...", "...", "...", "...", "Queued"),
                     tags=("pending",)
                 )
-                self.item_row_ids[target] = row_id
+                self.item_row_ids[target_key] = row_id
 
         self.total_submitted += len(targets)
         self.controller.add_targets(targets)

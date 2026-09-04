@@ -1,5 +1,18 @@
 
 (function () {
+  function copyVal(val) {
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = val;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0.01';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    } catch(e){}
+  }
+
   function simClick(el) {
     if (!el) return;
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -80,21 +93,21 @@
         setTimeout(() => {
           let trs2 = Array.from(document.querySelectorAll('tbody tr')).filter(r => r.children.length > 3);
           if (checkBrandDups(trs2)) {
-            prompt('DUPLICATE', 'NO');
+            copyVal('YES');
           } else {
-            prompt('DUPLICATE', 'NO');
+            copyVal('NO');
           }
         }, 4000);
       } else {
         // If no city input or city value, fallback to checking brand on current results
         if (checkBrandDups(trs)) {
-          prompt('DUPLICATE', 'YES');
+          copyVal('YES');
         } else {
-          prompt('DUPLICATE', 'NO');
+          copyVal('NO');
         }
       }
     } else {
-      prompt('DUPLICATE', 'NO');
+      copyVal('NO');
     }
   }, 4000);
 })();
