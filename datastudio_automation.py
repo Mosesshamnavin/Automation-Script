@@ -429,9 +429,8 @@ def main():
         pyautogui.press('enter')
         time.sleep(4.0)
         
-        # Search Users list with Email and Brand
+        # Search Users list with Email and Brand (Synchronous two-phase filter & extract)
         js_find_macro = load_macro("playbison_find_by_email.js", TARGET_EMAIL=player_email, TARGET_BRAND=player_brand)
-        pyperclip.copy("WAITING_FOR_FIND")
         pyperclip.copy(js_find_macro)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
@@ -440,14 +439,15 @@ def main():
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
         pyautogui.press('enter')
+        time.sleep(1.0)
         
+        c_res = pyperclip.paste().strip()
         found_profile = None
-        for poll_i in range(30):  # Wait up to 15s for self-polling macro to populate table
-            time.sleep(0.5)
-            c_res = pyperclip.paste().strip()
-            if c_res.startswith("FOUND_USERS_LIST|"):
-                parts = c_res.split("|")
-                found_profile = {
+
+        def _parse_user_result(raw_str):
+            if raw_str.startswith("FOUND_USERS_LIST|"):
+                parts = raw_str.split("|")
+                return {
                     "email": parts[1] if len(parts) > 1 else player_email,
                     "player_id": parts[2] if len(parts) > 2 else "",
                     "brand": parts[3] if len(parts) > 3 else player_brand,
@@ -455,28 +455,34 @@ def main():
                     "wallet_id": parts[5] if len(parts) > 5 else "",
                     "name": parts[6] if len(parts) > 6 else ""
                 }
-                break
-            elif c_res.startswith("FOUND_WITHDRAWAL|"):
-                parts = c_res.split("|")
-                found_profile = {
-                    "email": parts[1] if len(parts) > 1 else player_email,
-                    "withdrawal_id": parts[2] if len(parts) > 2 else "",
-                    "brand": parts[3] if len(parts) > 3 else player_brand,
-                    "w_value": parts[4] if len(parts) > 4 else "",
-                    "t_curr": parts[5] if len(parts) > 5 else "PLN",
-                    "id_date": parts[6] if len(parts) > 6 else "",
-                    "wallet_id": parts[7] if len(parts) > 7 else "",
-                    "operator": parts[8] if len(parts) > 8 else "",
-                    "name": parts[9] if len(parts) > 9 else ""
-                }
-                break
-            elif c_res in ("NOT_FOUND_ON_PAGE", "NO_PENDING_WITHDRAWAL"):
-                break
+            return None
+
+        found_profile = _parse_user_result(c_res)
+
+        if not found_profile:
+            # Filter was applied by macro; wait 3.5s for AJAX results table to render
+            print(f"[PLAYBISON] Applied filter for '{player_email}' ({player_brand}). Waiting 3.5 seconds for Users list table to reload...")
+            time.sleep(3.5)
+            
+            # Re-read table synchronously
+            for attempt in range(4):
+                pyperclip.copy(js_find_macro)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                time.sleep(0.8)
+                
+                c_res = pyperclip.paste().strip()
+                found_profile = _parse_user_result(c_res)
+                if found_profile:
+                    break
+                time.sleep(1.2)
 
         if found_profile:
-            if found_profile.get("wallet_id"):
-                wallet_id = found_profile["wallet_id"]
-                saved_wid = wallet_id
             if found_profile.get("city"):
                 city = found_profile["city"]
             if found_profile.get("brand"):
@@ -489,17 +495,44 @@ def main():
                 p_parts = player_name.strip().split(None, 1)
                 fn = p_parts[0]
                 ln = p_parts[1] if len(p_parts) > 1 else ""
-            if found_profile.get("w_value"):
-                w_value = found_profile["w_value"]
-            if found_profile.get("t_curr"):
-                t_curr = found_profile["t_curr"]
-            if found_profile.get("id_date"):
-                id_date = found_profile["id_date"]
-            if found_profile.get("operator"):
-                playbison_op = found_profile["operator"]
+            if found_profile.get("wallet_id") and len(found_profile["wallet_id"]) >= 20:
+                wallet_id = found_profile["wallet_id"]
+                saved_wid = wallet_id
+
+            # If wallet_id is not a 24-hex ObjectId, resolve it via player profile URL
+            target_profile_id = wallet_id if (wallet_id and len(wallet_id) >= 20) else true_player_id
+            if target_profile_id and (not wallet_id or len(wallet_id) < 20):
+                print(f"[PLAYBISON] Resolving Hex Wallet ID from player profile (#action:admin.user:{target_profile_id})...")
+                prof_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{target_profile_id}"
+                webbrowser.open_new_tab(prof_url)
+                time.sleep(4.5)
+                js_extract_player_id = load_macro("ds_extract_player_id.js")
+                pyperclip.copy(js_extract_player_id)
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.3)
+                pyautogui.write('javascript:')
+                time.sleep(0.2)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.3)
+                pyautogui.press('enter')
+                time.sleep(1.0)
+                res_prof = pyperclip.paste().strip()
+                if res_prof and "|WALLET:" in res_prof:
+                    m_w = re.search(r"WALLET:([a-f0-9]{20,32})", res_prof, re.I)
+                    if m_w:
+                        wallet_id = m_w.group(1).strip()
+                        saved_wid = wallet_id
+                        print(f"[PLAYBISON] Extracted true Hex Wallet ID: {wallet_id}")
+                    if "|CITY:" in res_prof:
+                        c_val = res_prof.split("|CITY:")[1].strip()
+                        if c_val and not city:
+                            city = c_val.split("(")[0].strip()
+                # Close the temporary profile tab
+                pyautogui.hotkey('ctrl', 'w')
+                time.sleep(0.4)
             
             verify_raw = f"RESOLVED_USERS_LIST|WALLET:{wallet_id}|NAME:{true_player_name}|BRAND:{player_brand}"
-            print(f"[PLAYBISON] Successfully resolved via Users list with Email & Brand! Wallet: {wallet_id} | Name: {player_name} | City: {city} | Brand: {player_brand}")
+            print(f"[PLAYBISON] Successfully resolved via Users list with Email & Brand! User ID: {true_player_id} | Wallet: {wallet_id} | Name: {player_name} | City: {city} | Brand: {player_brand}")
         else:
             print(f"[PLAYBISON] Target '{player_email}' ({player_brand}) could not be found in Users list.")
 

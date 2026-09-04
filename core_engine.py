@@ -375,6 +375,9 @@ class VerificationEngine:
 
                 # 3. Wallet ID
                 if "Successfully resolved via Users list with Email & Brand!" in line_str:
+                    m_uid = re.search(r"User ID:\s*(\d+)", line_str)
+                    if m_uid:
+                        result_data["player_id"] = m_uid.group(1).strip()
                     m_wid = re.search(r"Wallet:\s*([a-f0-9]+)", line_str, re.I)
                     if m_wid:
                         result_data["wallet_id"] = m_wid.group(1).strip()
