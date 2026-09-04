@@ -112,7 +112,7 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.2)
         pyautogui.press('enter')
-        time.sleep(0.8)
+        time.sleep(1.8)
     except Exception:
         pass
 
@@ -442,7 +442,7 @@ def main():
         pyautogui.press('enter')
         
         found_profile = None
-        for _ in range(8):
+        for poll_i in range(30):  # Wait up to 15s for self-polling macro to populate table
             time.sleep(0.5)
             c_res = pyperclip.paste().strip()
             if c_res.startswith("FOUND_USERS_LIST|"):
@@ -455,50 +455,6 @@ def main():
                     "wallet_id": parts[5] if len(parts) > 5 else "",
                     "name": parts[6] if len(parts) > 6 else ""
                 }
-                break
-            elif c_res == "FILTER_APPLIED":
-                print(f"[PLAYBISON] Applied Email filter for '{player_email}'. Waiting 3.5s for table reload...")
-                time.sleep(3.5)
-                # Re-inject and read
-                pyperclip.copy("WAITING_FOR_FIND")
-                pyperclip.copy(js_find_macro)
-                pyautogui.hotkey('ctrl', 'l')
-                time.sleep(0.3)
-                pyautogui.write('javascript:')
-                time.sleep(0.2)
-                pyautogui.hotkey('ctrl', 'v')
-                time.sleep(0.3)
-                pyautogui.press('enter')
-                for _ in range(8):
-                    time.sleep(0.5)
-                    c_res2 = pyperclip.paste().strip()
-                    if c_res2.startswith("FOUND_USERS_LIST|"):
-                        parts = c_res2.split("|")
-                        found_profile = {
-                            "email": parts[1] if len(parts) > 1 else player_email,
-                            "player_id": parts[2] if len(parts) > 2 else "",
-                            "brand": parts[3] if len(parts) > 3 else player_brand,
-                            "city": parts[4].split("(")[0].strip() if len(parts) > 4 else "",
-                            "wallet_id": parts[5] if len(parts) > 5 else "",
-                            "name": parts[6] if len(parts) > 6 else ""
-                        }
-                        break
-                    elif c_res2.startswith("FOUND_WITHDRAWAL|"):
-                        parts = c_res2.split("|")
-                        found_profile = {
-                            "email": parts[1] if len(parts) > 1 else player_email,
-                            "withdrawal_id": parts[2] if len(parts) > 2 else "",
-                            "brand": parts[3] if len(parts) > 3 else player_brand,
-                            "w_value": parts[4] if len(parts) > 4 else "",
-                            "t_curr": parts[5] if len(parts) > 5 else "PLN",
-                            "id_date": parts[6] if len(parts) > 6 else "",
-                            "wallet_id": parts[7] if len(parts) > 7 else "",
-                            "operator": parts[8] if len(parts) > 8 else "",
-                            "name": parts[9] if len(parts) > 9 else ""
-                        }
-                        break
-                    elif c_res2 in ("NOT_FOUND_ON_PAGE", "NO_PENDING_WITHDRAWAL"):
-                        break
                 break
             elif c_res.startswith("FOUND_WITHDRAWAL|"):
                 parts = c_res.split("|")

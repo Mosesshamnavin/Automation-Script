@@ -24,10 +24,28 @@
         try { btn.click(); } catch (e) {}
       }
     }
+
+    // If currently on Users list page, click Payment & Frauds -> Withdraw to confirm
+    let bText = (doc.body.textContent || '').toLowerCase();
+    if (window.location.hash.includes('users') || bText.includes('users list')) {
+      let p = doc.evaluate(
+        "//*[not(self::script) and not(self::style) and text()[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'payment&frauds')]]",
+        doc, null, 9, null
+      ).singleNodeValue;
+      if (p) {
+        try { p.click(); } catch(e){}
+        setTimeout(() => {
+          let w = doc.evaluate(
+            "//*[not(self::script) and not(self::style) and text()[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'withdraw to confirm')]]",
+            doc, null, 9, null
+          ).singleNodeValue;
+          if (w) { try { w.click(); } catch(e){} }
+        }, 300);
+      }
+    }
   }
 
-
-  // 3. Set the window hash to trigger details modal
+  // 2. Set the window hash to trigger details modal
   if (id && !id.startsWith('###')) {
     if (window.location.hash === '#action:admin.payment.details:' + id) {
       window.location.hash = '#action:admin.payment.details:' + id + '_toggle';
@@ -35,7 +53,7 @@
     setTimeout(() => {
       window.location.hash = '#action:admin.payment.details:' + id;
       try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch(e){}
-    }, 50);
+    }, 100);
   }
 
   // 3. Find and click the specific row or link for this ID or Email

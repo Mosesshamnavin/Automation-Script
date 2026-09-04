@@ -12,6 +12,6 @@
         document, null, 9, null
       ).singleNodeValue;
       if (w) w.click();
-    }, 1000);
+    }, 400);
   }
 })();
