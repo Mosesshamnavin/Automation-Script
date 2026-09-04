@@ -76,6 +76,112 @@ def convert_to_pln(amount_str, currency, **kwargs):
 
 
 
+def get_current_tab_url():
+    """Focuses address bar, copies the current URL to clipboard, and restores prior clipboard."""
+    prev_clip = ""
+    try:
+        prev_clip = pyperclip.paste()
+    except Exception:
+        pass
+        
+    url = ""
+    try:
+        pyperclip.copy("")
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.18)
+        pyautogui.hotkey('ctrl', 'c')
+        time.sleep(0.18)
+        url = pyperclip.paste().strip()
+        pyautogui.press('escape')
+        time.sleep(0.1)
+    except Exception:
+        pass
+        
+    # Restore prior clipboard if it was not empty and url was read
+    if prev_clip and prev_clip != url:
+        try:
+            pyperclip.copy(prev_clip)
+        except Exception:
+            pass
+            
+    return url
+
+
+def is_unintended_page(url):
+    """Detects if current page is Google Search, blank tab, or internal browser page."""
+    if not url:
+        return True
+    u = url.lower().strip()
+    if u in ["about:blank", "chrome://newtab", "chrome://newtab/"]:
+        return True
+    if u.startswith("chrome://") or u.startswith("edge://"):
+        return True
+    # Detect Google Search / homepage / bing / search engines
+    if "/search" in u and ("google." in u or "bing." in u or "duckduckgo." in u):
+        return True
+    if "webhp" in u or "url?sa=" in u:
+        return True
+    if u.startswith("https://www.google.") or u.startswith("http://www.google.") or u.startswith("https://google."):
+        return True
+    return False
+
+
+def confirm_tab_url(expected_pattern, fallback_url=None, max_wait=8.0, description=""):
+    """
+    Confirms that the active browser tab matches `expected_pattern`.
+    If the tab is on Google Search, about:blank, or does not match within max_wait,
+    it automatically re-navigates directly to `fallback_url` (if provided) and verifies again.
+    """
+    desc = description or expected_pattern
+    print(f"[TAB CHECK] Verifying active tab is on: {desc}...")
+    
+    start_time = time.time()
+    while time.time() - start_time < max_wait:
+        current_url = get_current_tab_url()
+        
+        # Check if unintended (Google search, new tab, blank)
+        if is_unintended_page(current_url):
+            if fallback_url:
+                print(f"[TAB CHECK] ⚠️ Detected unintended page ('{current_url[:45]}...'). Re-navigating to {desc}...")
+                pyautogui.hotkey('ctrl', 'l')
+                time.sleep(0.2)
+                pyperclip.copy(fallback_url)
+                pyautogui.hotkey('ctrl', 'v')
+                time.sleep(0.2)
+                pyautogui.press('enter')
+                time.sleep(3.5)
+                continue
+        elif expected_pattern.lower() in current_url.lower():
+            print(f"[TAB CHECK] Verified: on {desc} ({current_url[:65]}...)")
+            pyautogui.press('escape')
+            time.sleep(0.1)
+            return True
+            
+        time.sleep(0.8)
+        
+    # Final recovery attempt if fallback_url provided and still not on expected page
+    if fallback_url:
+        print(f"[TAB CHECK] Not on {desc} after wait. Force navigating to: {fallback_url[:65]}...")
+        pyautogui.hotkey('ctrl', 'l')
+        time.sleep(0.2)
+        pyperclip.copy(fallback_url)
+        pyautogui.hotkey('ctrl', 'v')
+        time.sleep(0.2)
+        pyautogui.press('enter')
+        time.sleep(3.5)
+        
+        final_url = get_current_tab_url()
+        if expected_pattern.lower() in final_url.lower() and not is_unintended_page(final_url):
+            print(f"[TAB CHECK] Successfully navigated to {desc}!")
+            pyautogui.press('escape')
+            time.sleep(0.1)
+            return True
+            
+    print(f"[TAB CHECK] WARNING: Expected {desc}, but current URL is: '{get_current_tab_url()[:65]}'")
+    pyautogui.press('escape')
+    return False
+
+
 def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=False, datastudio_opened=False, duplicates_opened=False):
     print("[DATASTUDIO] Closing opened auxiliary tabs to return to Playbison...")
     if sheets_opened:
@@ -100,6 +206,7 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
     time.sleep(0.5)
     pyautogui.press('escape')
     time.sleep(0.3)
+    confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=5.0, description="Playbison Tab 1")
 
     # Restore Tab 1 to Withdrawals to Confirm table
     try:
@@ -107,7 +214,7 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
         pyperclip.copy(js_nav_back)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.2)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.2)
@@ -263,12 +370,13 @@ def main():
         time.sleep(0.2)
         pyautogui.press('escape')
         time.sleep(0.3)
+        confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=4.0, description="Playbison Tab 1")
         
         js_open_modal = load_macro("ds_open_modal.js", PLAYER_ID=player_id, PLAYER_EMAIL=player_email)
         pyperclip.copy(js_open_modal)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -282,7 +390,7 @@ def main():
         pyperclip.copy(js_extract_macro)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -422,19 +530,20 @@ def main():
         pyperclip.copy(js_nav_users)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
         pyautogui.press('enter')
-        time.sleep(4.0)
+        time.sleep(3.5)
+        confirm_tab_url("admin.users", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.users", max_wait=5.0, description="Playbison Users List")
         
         # Search Users list with Email and Brand (Synchronous two-phase filter & extract)
         js_find_macro = load_macro("playbison_find_by_email.js", TARGET_EMAIL=player_email, TARGET_BRAND=player_brand)
         pyperclip.copy(js_find_macro)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -469,7 +578,7 @@ def main():
                 pyperclip.copy(js_find_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -506,11 +615,12 @@ def main():
                 prof_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{target_profile_id}"
                 webbrowser.open_new_tab(prof_url)
                 time.sleep(4.5)
+                confirm_tab_url("admin.user", fallback_url=prof_url, max_wait=6.0, description=f"Player Profile #{target_profile_id}")
                 js_extract_player_id = load_macro("ds_extract_player_id.js")
                 pyperclip.copy(js_extract_player_id)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -530,6 +640,7 @@ def main():
                 # Close the temporary profile tab
                 pyautogui.hotkey('ctrl', 'w')
                 time.sleep(0.4)
+                confirm_tab_url("admin.users", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.users", max_wait=4.0, description="Playbison Users List")
             
             verify_raw = f"RESOLVED_USERS_LIST|WALLET:{wallet_id}|NAME:{true_player_name}|BRAND:{player_brand}"
             print(f"[PLAYBISON] Successfully resolved via Users list with Email & Brand! User ID: {true_player_id} | Wallet: {wallet_id} | Name: {player_name} | City: {city} | Brand: {player_brand}")
@@ -604,7 +715,8 @@ def main():
         print(f"\n[PLAYBISON] Checking duplicates for {fn} {ln} in Users list...")
         duplicates_opened = True
         webbrowser.open_new_tab("https://api-acnt.playbison.com/platform-admin/#action:admin.users")
-        time.sleep(6.0)
+        time.sleep(5.5)
+        confirm_tab_url("admin.users", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.users", max_wait=6.0, description="Duplicates Check (Users List)")
         
         js_check_dup = load_macro("ds_check_duplicates.js", FN=fn, LN=ln, CITY=city, BRAND=player_brand)
         
@@ -612,7 +724,7 @@ def main():
         pyperclip.copy(js_check_dup)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -642,6 +754,7 @@ def main():
             pyautogui.hotkey('ctrl', 'w')
             time.sleep(0.3)
             duplicates_opened = False
+            confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=4.0, description="Playbison Tab 1")
     
     # Detect name mismatch errors
     is_error = verify_raw.startswith("NAMEFAIL:") or "not found in request data" in verify_raw.lower() or verify_raw.startswith("NOTFOUND")
@@ -657,13 +770,14 @@ def main():
         print(f"[PLAYBISON] Resolving Player Email from user profile (#action:admin.user:{wallet_id})...")
         wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
         webbrowser.open_new_tab(wallet_url)
-        time.sleep(5.5)
+        time.sleep(5.0)
+        confirm_tab_url("admin.user", fallback_url=wallet_url, max_wait=6.0, description=f"Player Profile #{wallet_id}")
         js_extract_player_id = load_macro("ds_extract_player_id.js")
         pyperclip.copy('WAITING_FOR_ID')
         pyperclip.copy(js_extract_player_id)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -686,6 +800,7 @@ def main():
         # Close the profile tab before launching Data Studio
         pyautogui.hotkey('ctrl', 'w')
         time.sleep(0.4)
+        confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=4.0, description="Playbison Tab 1")
 
     # Save resolved user data to last_user.json so state is synchronized
     try:
@@ -721,23 +836,31 @@ def main():
     
     print("\nWaiting 9 seconds for Data Studio to fully load...")
     time.sleep(9)
+    confirm_tab_url("datastudio.google.com", fallback_url=url, max_wait=8.0, description="Data Studio Report")
     
     print("Executing Phase 1: Switching to Bison BO and focusing Email...")
     email_to_paste = (custom_email or player_email).strip().lower()
     
     # Macro 1: Switch to Bison BO and focus the precise <input> box
-    js_macro_1 = load_macro("ds_switch_email.js")
+    js_macro_1 = load_macro("ds_switch_email.js", TARGET_EMAIL=email_to_paste)
     
     pyperclip.copy(js_macro_1)
     pyautogui.hotkey('ctrl', 'l')
     time.sleep(0.5)
-    pyautogui.write('javascript:')
+    pyautogui.write('javascript:', interval=0.015)
     time.sleep(0.2)
     pyautogui.hotkey('ctrl', 'v')
     time.sleep(0.5)
     pyautogui.press('enter')
     
-    time.sleep(2) # Wait for javascript macro to finish clicking and focusing
+    time.sleep(2.0) # Wait for javascript macro to finish clicking and focusing
+    
+    # Dismiss address bar to ensure focus is inside webpage
+    pyautogui.press('escape')
+    time.sleep(0.2)
+    
+    # Verify tab is still Data Studio, NOT Google search!
+    confirm_tab_url("datastudio.google.com", fallback_url=url, max_wait=4.0, description="Data Studio Report")
     
     print("Typing the email using simulated keystrokes...")
     pyautogui.hotkey('ctrl', 'a')
@@ -758,7 +881,7 @@ def main():
     pyperclip.copy(js_macro_2)
     pyautogui.hotkey('ctrl', 'l')
     time.sleep(0.5)
-    pyautogui.write('javascript:')
+    pyautogui.write('javascript:', interval=0.015)
     time.sleep(0.2)
     pyautogui.hotkey('ctrl', 'v')
     time.sleep(0.5)
@@ -780,7 +903,7 @@ def main():
     pyperclip.copy(js_macro_3)
     pyautogui.hotkey('ctrl', 'l')
     time.sleep(0.5)
-    pyautogui.write('javascript:')
+    pyautogui.write('javascript:', interval=0.015)
     time.sleep(0.2)
     pyautogui.hotkey('ctrl', 'v')
     time.sleep(0.5)
@@ -801,7 +924,7 @@ def main():
         pyperclip.copy(js_macro_4)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -835,7 +958,7 @@ def main():
         pyperclip.copy(js_macro_brand)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -853,7 +976,7 @@ def main():
         pyperclip.copy(js_macro_4)
         pyautogui.hotkey('ctrl', 'l')
         time.sleep(0.3)
-        pyautogui.write('javascript:')
+        pyautogui.write('javascript:', interval=0.015)
         time.sleep(0.2)
         pyautogui.hotkey('ctrl', 'v')
         time.sleep(0.3)
@@ -923,6 +1046,7 @@ def main():
                 
                 print("[PLAYBISON] Waiting 7 seconds for wallet page to load to open notes...")
                 time.sleep(5.0)
+                confirm_tab_url("admin.user", fallback_url=wallet_url, max_wait=6.0, description=f"Wallet Profile #{wallet_id}")
                 
                 # Extract the correct Player ID and Name from the wallet page
                 js_extract_player_id = load_macro("ds_extract_player_id.js")
@@ -930,7 +1054,7 @@ def main():
                 pyperclip.copy(js_extract_player_id)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -996,7 +1120,7 @@ def main():
                 pyperclip.copy(js_notes_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -1024,7 +1148,7 @@ def main():
                 pyperclip.copy(js_check_notes)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -1063,7 +1187,7 @@ def main():
                         pyperclip.copy(js_check_notes)
                         pyautogui.hotkey('ctrl', 'l')
                         time.sleep(0.3)
-                        pyautogui.write('javascript:')
+                        pyautogui.write('javascript:', interval=0.015)
                         time.sleep(0.2)
                         pyautogui.hotkey('ctrl', 'v')
                         time.sleep(0.3)
@@ -1078,7 +1202,7 @@ def main():
                     pyperclip.copy(js_docs_macro)
                     pyautogui.hotkey('ctrl', 'l')
                     time.sleep(0.3)
-                    pyautogui.write('javascript:')
+                    pyautogui.write('javascript:', interval=0.015)
                     time.sleep(0.2)
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
@@ -1091,7 +1215,7 @@ def main():
                     pyperclip.copy(js_open_doc)
                     pyautogui.hotkey('ctrl', 'l')
                     time.sleep(0.3)
-                    pyautogui.write('javascript:')
+                    pyautogui.write('javascript:', interval=0.015)
                     time.sleep(0.2)
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
@@ -1168,7 +1292,7 @@ def main():
                 pyperclip.copy(js_trans_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -1202,7 +1326,7 @@ def main():
                                 pyperclip.copy(js_notes_retry)
                                 pyautogui.hotkey('ctrl', 'l')
                                 time.sleep(0.3)
-                                pyautogui.write('javascript:')
+                                pyautogui.write('javascript:', interval=0.015)
                                 time.sleep(0.2)
                                 pyautogui.hotkey('ctrl', 'v')
                                 time.sleep(0.3)
@@ -1220,6 +1344,7 @@ def main():
                             webbrowser.open_new_tab(analytics_url)
                             print("[PLAYBISON] Waiting 8 seconds for Analytics to load...")
                             time.sleep(8.0)
+                            confirm_tab_url("playbison-analytics", fallback_url=analytics_url, max_wait=6.0, description="Analytics Platform")
                             
                             print(f"[PLAYBISON] Pasting Wallet ID: {wallet_id}")
                             js_analytics = f"""(function(){{
@@ -1243,7 +1368,7 @@ def main():
                             time.sleep(0.5)
                             pyautogui.hotkey('ctrl', 'l')
                             time.sleep(0.3)
-                            pyautogui.write('javascript:')
+                            pyautogui.write('javascript:', interval=0.015)
                             time.sleep(0.2)
                             pyautogui.hotkey('ctrl', 'v')
                             time.sleep(0.3)
@@ -1259,7 +1384,7 @@ def main():
                             time.sleep(0.5)
                             pyautogui.hotkey('ctrl', 'l')
                             time.sleep(0.3)
-                            pyautogui.write('javascript:')
+                            pyautogui.write('javascript:', interval=0.015)
                             time.sleep(0.2)
                             pyautogui.hotkey('ctrl', 'v')
                             time.sleep(0.3)
@@ -1341,7 +1466,8 @@ def main():
                             print("[PLAYBISON] Closing Analytics tab to return to Playbison tab...")
                             pyautogui.hotkey('ctrl', 'w')   # close Analytics tab → Chrome auto-focuses prev tab
                             analytics_opened = False
-                            time.sleep(2.0)
+                            time.sleep(1.0)
+                            confirm_tab_url("admin.user", fallback_url=wallet_url, max_wait=4.0, description=f"Wallet Profile #{wallet_id}")
                             
                             print("[PLAYBISON] Injecting macro to set Playbison Date filters...")
                             js_set_dates = load_macro("ds_set_transaction_dates.js", DATE_FROM=start_str, DATE_TO=end_str)
@@ -1350,7 +1476,7 @@ def main():
                             time.sleep(0.5)
                             pyautogui.hotkey('ctrl', 'l')
                             time.sleep(0.3)
-                            pyautogui.write('javascript:')
+                            pyautogui.write('javascript:', interval=0.015)
                             time.sleep(0.2)
                             pyautogui.hotkey('ctrl', 'v')
                             time.sleep(0.3)
@@ -1402,7 +1528,7 @@ def main():
                                 pyperclip.copy(js_open_bonuses)
                                 pyautogui.hotkey('ctrl', 'l')
                                 time.sleep(0.3)
-                                pyautogui.write('javascript:')
+                                pyautogui.write('javascript:', interval=0.015)
                                 time.sleep(0.2)
                                 pyautogui.hotkey('ctrl', 'v')
                                 time.sleep(0.3)
@@ -1416,7 +1542,7 @@ def main():
                                 pyperclip.copy(js_bonus)
                                 pyautogui.hotkey('ctrl', 'l')
                                 time.sleep(0.3)
-                                pyautogui.write('javascript:')
+                                pyautogui.write('javascript:', interval=0.015)
                                 time.sleep(0.2)
                                 pyautogui.hotkey('ctrl', 'v')
                                 time.sleep(0.3)
@@ -1459,7 +1585,7 @@ def main():
                 pyperclip.copy(js_payment_log_macro)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -1481,7 +1607,7 @@ def main():
                 pyperclip.copy(js_get_last_deposit)
                 pyautogui.hotkey('ctrl', 'l')
                 time.sleep(0.3)
-                pyautogui.write('javascript:')
+                pyautogui.write('javascript:', interval=0.015)
                 time.sleep(0.2)
                 pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
@@ -1506,7 +1632,7 @@ def main():
                         pyperclip.copy(js_get_last_deposit)
                         pyautogui.hotkey('ctrl', 'l')
                         time.sleep(0.3)
-                        pyautogui.write('javascript:')
+                        pyautogui.write('javascript:', interval=0.015)
                         time.sleep(0.2)
                         pyautogui.hotkey('ctrl', 'v')
                         time.sleep(0.3)
@@ -1597,7 +1723,7 @@ def main():
                     time.sleep(0.5)
                     pyautogui.hotkey('ctrl', 'l')
                     time.sleep(0.3)
-                    pyautogui.write('javascript:')
+                    pyautogui.write('javascript:', interval=0.015)
                     time.sleep(0.2)
                     pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
@@ -1908,6 +2034,7 @@ def main():
                     
                     print("[GOOGLE SHEETS] Waiting 4.5 seconds for Google Sheets to load...")
                     time.sleep(4.5)
+                    confirm_tab_url("docs.google.com/spreadsheets", fallback_url=target_url, max_wait=6.0, description="Google Sheets Tracker")
                     
                     print("[GOOGLE SHEETS] Navigating to the next empty row from bottom...")
                     # 1. Ctrl+End lands on the bottom-right corner of the used data range
@@ -1951,6 +2078,7 @@ def main():
                         pyautogui.hotkey('ctrl', 'w')
                         time.sleep(0.3)
                         sheets_opened = False
+                        confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=4.0, description="Playbison Tab 1")
                     
                     # Record withdrawal_id as successfully completed
                     if withdrawal_id:

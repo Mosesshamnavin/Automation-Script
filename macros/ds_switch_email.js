@@ -1,11 +1,31 @@
-(function () {
-  try {
-    function simClick(el) {
-      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }
+// Dynamic placeholder:
+//   ###TARGET_EMAIL### -> optional email to enter
 
+(function () {
+  let targetEmail = '###TARGET_EMAIL###';
+  if (targetEmail.startsWith('###')) targetEmail = '';
+
+  function copyVal(val) {
+    try {
+      let ta = document.createElement('textarea');
+      ta.value = val;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0.01';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    } catch(e){}
+  }
+
+  function simClick(el) {
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  }
+
+  try {
     let els = Array.from(document.querySelectorAll('*'));
     let bison = els.find(
       e => e.children.length === 0 &&
@@ -40,13 +60,20 @@
             target.focus();
             if (target.style) target.style.border = '3px solid blue';
             simClick(target);
+            if (targetEmail) {
+              let s = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+              if (s) s.call(target, targetEmail); else target.value = targetEmail;
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              target.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            copyVal('EMAIL_FOCUSED_OK');
           } else {
-            alert('Could not find the email input box!');
+            copyVal('EMAIL_INPUT_NOT_FOUND');
           }
         }
       }, 1500);
     }
   } catch (e) {
-    alert('Macro 1 Error: ' + e.message);
+    copyVal('ERROR: ' + e.message);
   }
 })();
