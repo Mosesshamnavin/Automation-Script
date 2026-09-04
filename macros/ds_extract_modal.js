@@ -71,15 +71,9 @@
         });
       }
 
-      // 3. If targetId was specified but container doesn't match and has a different numeric ID, do NOT use stale container
-      if (!activeContainer && visibleContainers.length > 0) {
-        let candidate = visibleContainers[visibleContainers.length - 1];
-        let cTxt = candidate.innerText || candidate.textContent || '';
-        // If candidate contains an obvious different transaction ID, reject it
-        let hasWrongId = targetId && /\b\d{7}\b/.test(cTxt) && !cTxt.includes(targetId);
-        if (!hasWrongId) {
-          activeContainer = candidate;
-        }
+      // 3. Fallback: only if NEITHER targetId nor targetEmail was specified, use the topmost container
+      if (!activeContainer && !targetId && !targetEmail && visibleContainers.length > 0) {
+        activeContainer = visibleContainers[visibleContainers.length - 1];
       }
 
       if (!activeContainer) {

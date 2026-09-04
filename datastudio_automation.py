@@ -211,6 +211,7 @@ def main():
             saved_wid = ""
             saved_operator = ""
             w_value = ""
+            city = ""
             t_curr = "PLN"
             id_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         else:
@@ -556,6 +557,11 @@ def main():
     except Exception:
         pass
     
+    if not player_email or player_email == "NOTFOUND":
+        print(f"\n[PLAYBISON] ❌ Target '{player_id}' could not be resolved (not found on this platform). Skipping to next target...")
+        cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
+        return
+
     url = "https://datastudio.google.com/u/0/reporting/83ab6a98-d02b-4d39-b793-c17189710132/page/ewQiF"
     datastudio_opened = True
     webbrowser.open_new_tab(url)
