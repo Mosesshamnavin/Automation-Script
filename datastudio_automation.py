@@ -18,6 +18,7 @@ if sys.platform == "win32":
         pass
 
 from macro_loader import load_macro
+from message_templates import get_message_from_sheet, has_unfilled_placeholders
 
 # Cache live exchange rates per session to avoid repeated API calls
 _fx_rate_cache = {}
@@ -204,6 +205,272 @@ def _is_approve_status(status):
     return s == "Approve" or s.startswith("Approve (")
 
 
+def _escape_for_js_string(text):
+    """Escape text for safe insertion into a JS single-quoted string placeholder."""
+    if text is None:
+        return ""
+    return json.dumps(str(text), ensure_ascii=False)[1:-1]
+
+
+def _format_message_date(date_str):
+    """Normalize a date string to YYYY-MM-DD for player-facing messages."""
+    if not date_str:
+        return datetime.datetime.now().strftime("%Y-%m-%d")
+    s = str(date_str).strip().replace("T", " ")
+    m = re.search(r'\b(20\d\d-\d\d-\d\d)\b', s)
+    if m:
+        return m.group(1)
+    m = re.search(r'\b(\d{2}\.\d{2}\.\d{4})\b', s)
+    if m:
+        try:
+            return datetime.datetime.strptime(m.group(1), "%d.%m.%Y").strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return s.split(" ")[0][:10]
+
+
+def _parse_profile_country(raw: str) -> str:
+    """Extract country from wallet/profile clipboard response."""
+    if not raw or "|COUNTRY:" not in raw:
+        return ""
+    return raw.split("|COUNTRY:")[1].split("|")[0].strip()
+
+
+def _build_player_message(
+    approval_status,
+    player_name="",
+    dep_amount="",
+    dep_date="",
+    withdrawal_id="",
+    city="",
+    country="",
+    email="",
+    dep_curr="PLN",
+):
+    """Build (title, body) for a non-approved withdrawal from Google Sheet templates."""
+    if _is_approve_status(approval_status):
+        return None
+
+    sheet_title, sheet_body = get_message_from_sheet(
+        approval_status,
+        city=city,
+        country=country,
+        email=email,
+        dep_date=dep_date,
+        dep_amount=dep_amount,
+        dep_curr=dep_curr,
+    )
+    if sheet_title and sheet_body:
+        return sheet_title, sheet_body
+
+    print("[MESSAGE TEMPLATE] Sheet template unavailable — using built-in fallback message.")
+    status_lower = (approval_status or "").lower()
+    dep_amt_txt = dep_amount.strip() if dep_amount else ""
+    dep_date_txt = _format_message_date(dep_date)
+
+    if "verify docs" in status_lower or "req last deposit" in status_lower:
+        title = "Potwierdzenie Twojego depozytu"
+        amount_line = dep_amt_txt if dep_amt_txt else "ostatni depozyt"
+        body = (
+            "Dzień dobry,\n\n"
+            "W celu zapewnienia bezpieczeństwa prosimy o dodatkową weryfikację.\n\n"
+            f"Prosimy o przesłanie oryginalnego potwierdzenia PDF przelewu bankowego "
+            f"za depozyt {amount_line} dokonany w dniu {dep_date_txt}.\n\n"
+            "Dokument prosimy przesłać w zakładce \"Prześlij dokumenty\".\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "req iban" in status_lower:
+        title = "Weryfikacja IBAN"
+        body = (
+            "Dzień dobry,\n\n"
+            "W celu realizacji wypłaty prosimy o weryfikację numeru IBAN.\n\n"
+            "Prosimy o przesłanie dokumentu potwierdzającego własność rachunku bankowego "
+            "w zakładce \"Prześlij dokumenty\".\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "third party" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            f"Twoja wypłata{f' (ID: {withdrawal_id})' if withdrawal_id else ''} została anulowana, "
+            "ponieważ dane konta odbiorcy nie należą do właściciela konta.\n\n"
+            "Wypłata może być realizowana wyłącznie na rachunek należący do właściciela konta.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "reject (stack" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            f"Twoja wypłata{f' (ID: {withdrawal_id})' if withdrawal_id else ''} została odrzucona "
+            "z powodu naruszenia zasad dotyczących obrotu bonusem.\n\n"
+            "Prosimy o kontakt z obsługą klienta, jeśli masz pytania.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "reject (gb iban)" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            f"Twoja wypłata{f' (ID: {withdrawal_id})' if withdrawal_id else ''} została odrzucona. "
+            "Wypłaty na rachunki GB IBAN nie są obsługiwane.\n\n"
+            "Prosimy o podanie rachunku bankowego spełniającego wymagania platformy.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "cancel (mismatch operator" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            f"Twoja wypłata{f' (ID: {withdrawal_id})' if withdrawal_id else ''} została anulowana. "
+            "Metoda wypłaty musi być zgodna z metodą ostatniego depozytu.\n\n"
+            "Prosimy o złożenie nowego wniosku o wypłatę tą samą metodą płatności, "
+            "którą dokonano ostatniego depozytu.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "limit reached" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            "Twój dzienny limit wypłat został osiągnięty. Limit odświeża się każdego dnia.\n\n"
+            "Możesz złożyć nowy wniosek o wypłatę po odnowieniu limitu.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "w/d ratio" in status_lower:
+        title = "Potwierdzenie Twojego depozytu"
+        amount_line = dep_amt_txt if dep_amt_txt else "ostatni depozyt"
+        body = (
+            "Dzień dobry,\n\n"
+            "W celu realizacji wypłaty prosimy o dodatkową weryfikację ostatniego depozytu.\n\n"
+            f"Prosimy o przesłanie oryginalnego potwierdzenia PDF przelewu bankowego "
+            f"za depozyt {amount_line} dokonany w dniu {dep_date_txt}.\n\n"
+            "Dokument prosimy przesłać w zakładce \"Prześlij dokumenty\".\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    if "review" in status_lower:
+        title = "Informacja o wypłacie"
+        body = (
+            "Dzień dobry,\n\n"
+            f"Twój wniosek o wypłatę{f' (ID: {withdrawal_id})' if withdrawal_id else ''} "
+            "jest obecnie w trakcie weryfikacji.\n\n"
+            "Skontaktujemy się z Tobą, jeśli będziemy potrzebować dodatkowych informacji.\n\n"
+            "Pozdrawiamy,\nZespół Bison Casino"
+        )
+        return title, body
+
+    title = "Informacja o wypłacie"
+    body = (
+        "Dzień dobry,\n\n"
+        f"Twój wniosek o wypłatę{f' (ID: {withdrawal_id})' if withdrawal_id else ''} "
+        "wymaga dodatkowej weryfikacji.\n\n"
+        "Prosimy o sprawdzenie wiadomości lub kontakt z obsługą klienta.\n\n"
+        "Pozdrawiamy,\nZespół Bison Casino"
+    )
+    return title, body
+
+
+def _resolve_deposit_fields(dep_date="", dep_val="", id_date="", w_value=""):
+    """Pick the best available deposit date and amount for message placeholders."""
+    eff_date = (dep_date or id_date or "").strip()
+    eff_amount = (dep_val or w_value or "").strip()
+    eff_amount = re.sub(r"[^\d.,]", "", eff_amount.replace(",", ".")).strip()
+    return eff_date, eff_amount
+
+
+def _run_playbison_send_message(wallet_id, title, body, auto_send=False):
+    """Open wallet profile, navigate to Messages tab, fill message; send only if auto_send=True."""
+    if not wallet_id or wallet_id == "NOTFOUND" or "..." in str(wallet_id):
+        print("[PLAYBISON] No valid wallet ID — skipping player message.")
+        return False
+    if not title or not body:
+        print("[PLAYBISON] Empty message title/body — skipping player message.")
+        return False
+
+    if has_unfilled_placeholders(body) or has_unfilled_placeholders(title):
+        print("\n" + "=" * 60)
+        print("[PLAYBISON] BLOCKED: Message still contains unfilled XXXXX placeholders.")
+        print(f"  Title: {title[:80]}")
+        print(f"  Body preview: {body[:120]}...")
+        print("  Deposit date/amount missing — will NOT send.")
+        print("=" * 60 + "\n")
+        return False
+
+    wallet_url = f"https://api-acnt.playbison.com/platform-admin/#action:admin.user:{wallet_id}"
+    mode = "SEND" if auto_send else "FILL-ONLY (review manually)"
+    print(f"\n[PLAYBISON] Opening wallet Messages tab [{mode}]: {wallet_url}")
+    webbrowser.open_new_tab(wallet_url)
+
+    print("[PLAYBISON] Waiting 6 seconds for wallet profile to load...")
+    time.sleep(6.0)
+    confirm_tab_url("admin.user", fallback_url=wallet_url, max_wait=8.0, description=f"Wallet Messages #{wallet_id}")
+
+    print("[PLAYBISON] Opening Messages tab...")
+    _inject_js_macro(load_macro("ds_open_messages.js"), pre_clipboard_flag="WAITING_MESSAGES_TAB")
+    time.sleep(3.0)
+
+    tab_ok = False
+    for _ in range(6):
+        clip_val = pyperclip.paste().strip()
+        if clip_val == "MESSAGES_TAB_OK":
+            tab_ok = True
+            break
+        if clip_val == "MESSAGES_TAB_FAIL":
+            break
+        time.sleep(0.8)
+
+    if not tab_ok:
+        print("[PLAYBISON] Could not open Messages tab — message not filled.")
+        return False
+
+    print(f"[PLAYBISON] Filling message title: '{title}'...")
+    pyperclip.copy(body)
+    time.sleep(0.2)
+    js_send = load_macro(
+        "ds_send_message.js",
+        MSG_TITLE=_escape_for_js_string(title),
+        AUTO_SEND="YES" if auto_send else "NO",
+    )
+    _inject_js_macro(js_send, pre_clipboard_flag="WAITING_MSG_SEND")
+
+    done_ok = False
+    for _ in range(15):
+        time.sleep(1.0)
+        clip_val = pyperclip.paste().strip()
+        if clip_val == "MSG_SENT:OK":
+            done_ok = True
+            print("[PLAYBISON] Player message sent successfully.")
+            break
+        if clip_val == "MSG_FILLED:OK":
+            done_ok = True
+            print("[PLAYBISON] Message filled in form — NOT sent (review and click Send Message manually).")
+            break
+        if clip_val.startswith("MSG_SENT:FAIL"):
+            print(f"[PLAYBISON] Failed to fill/send player message: {clip_val}")
+            break
+        if clip_val == "MSG_SENT:SKIP:ALREADY_RUNNING":
+            print("[PLAYBISON] Message macro already running — skipping duplicate injection.")
+            done_ok = True
+            break
+
+    if not done_ok:
+        print("[PLAYBISON] Message fill/send may still be pending — verify manually in Messages tab.")
+
+    return done_ok
+
+
 def _check_piq_login_status():
     """Return LOGGED_OUT:YES, LOGGED_OUT:NO, or LOGGED_OUT:UNKNOWN from PaymentIQ tab."""
     _inject_js_macro(load_macro("piq_check_login.js"), pre_clipboard_flag="WAITING_PIQ_LOGIN")
@@ -351,6 +618,12 @@ def main():
         print("\n[AUTO-MODE] Starting automatically in 2 seconds...")
         time.sleep(1)
 
+    auto_send_messages = "--send-messages" in sys.argv
+    if auto_send_messages:
+        print("[PLAYBISON] --send-messages enabled: messages will be sent automatically.")
+    else:
+        print("[PLAYBISON] Message mode: FILL-ONLY (pass --send-messages to auto-send).")
+
     # Disable pyautogui failsafe to prevent crashes during corner mouse movements
     pyautogui.FAILSAFE = False
 
@@ -398,6 +671,7 @@ def main():
             pass
 
     city = ""
+    country = ""
     if os.path.exists("last_user.json"):
         try:
             with open("last_user.json", "r", encoding="utf-8") as f:
@@ -414,6 +688,9 @@ def main():
                 raw_city = data.get("city", "")
                 if raw_city:
                     city = raw_city.split("(")[0].strip()
+                raw_country = data.get("country", "")
+                if raw_country:
+                    country = raw_country.strip()
         except Exception:
             pass
 
@@ -736,9 +1013,12 @@ def main():
                         saved_wid = wallet_id
                         print(f"[PLAYBISON] Extracted true Hex Wallet ID: {wallet_id}")
                     if "|CITY:" in res_prof:
-                        c_val = res_prof.split("|CITY:")[1].strip()
+                        c_val = res_prof.split("|CITY:")[1].split("|")[0].strip()
                         if c_val and not city:
                             city = c_val.split("(")[0].strip()
+                    c_country = _parse_profile_country(res_prof)
+                    if c_country and not country:
+                        country = c_country
                 # Close the temporary profile tab
                 pyautogui.hotkey('ctrl', 'w')
                 time.sleep(0.4)
@@ -912,6 +1192,7 @@ def main():
                 "id": player_id,
                 "brand": player_brand or "bison casino",
                 "city": city,
+                "country": country,
                 "w_value": w_value,
                 "t_curr": t_curr,
                 "id_date": id_date,
@@ -1183,6 +1464,10 @@ def main():
                         if c_prof and not city:
                             city = c_prof.split("(")[0].strip()
                             print(f"[PLAYBISON] Extracted City from wallet page: {city}")
+                    c_country = _parse_profile_country(clipboard_res)
+                    if c_country and not country:
+                        country = c_country
+                        print(f"[PLAYBISON] Extracted Country from wallet page: {country}")
 
                     if "|NAME:" in clipboard_res:
                         parts = clipboard_res.split("|NAME:")
@@ -1748,6 +2033,8 @@ def main():
                 cc_dep_count = 0      # Number of completed CC deposits in payment log
                 paylog_cc_ver = False  # True if any payment log note row has 'cc ver'
                 dep_date = ""          # Date of last completed deposit
+                dep_val = ""           # Amount of last completed deposit
+                dep_curr = "PLN"       # Currency of last completed deposit
                 prev_with_date = ""    # Date of previous completed withdrawal
                 
                 if payment_log_val.startswith("DEP_OP:"):
@@ -1776,6 +2063,10 @@ def main():
                                     paylog_cc_ver = field.replace("CC_VER:", "").strip() == "YES"
                                 elif field.startswith("DEP_DATE:"):
                                     dep_date = field.replace("DEP_DATE:", "").strip()
+                                elif field.startswith("DEP_VAL:"):
+                                    dep_val = field.replace("DEP_VAL:", "").strip()
+                                elif field.startswith("DEP_CURR:"):
+                                    dep_curr = field.replace("DEP_CURR:", "").strip() or dep_curr
                                 elif field.startswith("PREV_WITH_DATE:"):
                                     prev_with_date = field.replace("PREV_WITH_DATE:", "").strip()
                                 elif field.startswith("WITH_ID:"):
@@ -2185,6 +2476,31 @@ def main():
                     # If approved, open PaymentIQ and search Approve queue by player email
                     if _is_approve_status(approval_status):
                         piq_opened = _run_piq_approve_flow(player_email)
+                    else:
+                        eff_dep_date, eff_dep_amount = _resolve_deposit_fields(
+                            dep_date=dep_date,
+                            dep_val=dep_val,
+                            id_date=id_date,
+                            w_value=w_value,
+                        )
+                        player_msg = _build_player_message(
+                            approval_status,
+                            player_name=name_to_use,
+                            dep_amount=eff_dep_amount,
+                            dep_date=eff_dep_date,
+                            withdrawal_id=str(withdrawal_id or player_id or ""),
+                            city=city,
+                            country=country,
+                            email=player_email,
+                            dep_curr=dep_curr or t_curr or "PLN",
+                        )
+                        if player_msg:
+                            msg_title, msg_body = player_msg
+                            print(f"[PLAYBISON] Non-approve status '{approval_status}' — preparing player message.")
+                            _run_playbison_send_message(
+                                final_wid, msg_title, msg_body,
+                                auto_send=auto_send_messages,
+                            )
                     
                     # Record withdrawal_id as successfully completed
                     if withdrawal_id:

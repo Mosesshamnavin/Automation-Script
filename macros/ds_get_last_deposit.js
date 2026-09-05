@@ -110,6 +110,17 @@
           depDate = depositRow.children[dateIdx].textContent.trim();
         }
 
+        let depVal = "";
+        let depCurr = "";
+        if (depositRow) {
+          if (amountIdx !== -1 && depositRow.children.length > amountIdx) {
+            depVal = depositRow.children[amountIdx].textContent.trim();
+          }
+          if (currIdx !== -1 && depositRow.children.length > currIdx) {
+            depCurr = depositRow.children[currIdx].textContent.trim();
+          }
+        }
+
         // --- Find previous completed withdrawal row (prior to current) ---
         let prevWithRow = dataRows.find(tr => {
           if (tr !== withdrawRow && tr.children.length > Math.max(typeIdx, statusIdx)) {
@@ -161,7 +172,9 @@
           req: hasReq, 
           ccDepCount: ccDepCount, 
           ccVerInLog: ccVerInLog, 
-          depDate: depDate, 
+          depDate: depDate,
+          depVal: depVal,
+          depCurr: depCurr,
           prevWithDate: prevWithDate,
           withId: withId,
           withVal: withVal,
@@ -182,6 +195,8 @@
       + "|CC_DEP_COUNT:" + depositInfo.ccDepCount
       + "|CC_VER:" + depositInfo.ccVerInLog
       + "|DEP_DATE:" + depositInfo.depDate
+      + "|DEP_VAL:" + (depositInfo.depVal || "")
+      + "|DEP_CURR:" + (depositInfo.depCurr || "")
       + "|PREV_WITH_DATE:" + depositInfo.prevWithDate
       + "|WITH_ID:" + (depositInfo.withId || "")
       + "|WITH_VAL:" + (depositInfo.withVal || "")

@@ -129,7 +129,31 @@
     city = city.split('(')[0].trim();
   }
 
-  let res = id + '|NAME:' + name + '|EMAIL:' + email + '|WALLET:' + walletId + '|CITY:' + city;
+  // Extract Country
+  let country = '';
+  let countryLabel = all.find(e => {
+    let t = (e.textContent || '').trim().toLowerCase();
+    return (t === 'country:' || t === 'country' || t === 'nationality:' || t === 'nationality') && e.children.length === 0;
+  });
+  if (countryLabel) {
+    let next = countryLabel.nextElementSibling || (countryLabel.parentElement ? countryLabel.parentElement.querySelector('strong, span, dd, td, input') : null);
+    if (!next && countryLabel.closest('tr')) {
+      let tr = countryLabel.closest('tr');
+      if (tr.children.length >= 2) next = tr.children[1];
+    }
+    if (next) country = (next.textContent || next.value || '').trim();
+  }
+  if (!country) {
+    let countryInput = Array.from(document.querySelectorAll('input, select')).find(i => {
+      let n = (i.name || i.id || i.placeholder || '').toLowerCase();
+      return n === 'country' || n.includes('country');
+    });
+    if (countryInput) {
+      country = (countryInput.value || countryInput.textContent || '').trim();
+    }
+  }
+
+  let res = id + '|NAME:' + name + '|EMAIL:' + email + '|WALLET:' + walletId + '|CITY:' + city + '|COUNTRY:' + country;
   let input = document.createElement('input');
   input.value = res;
   document.body.appendChild(input);
