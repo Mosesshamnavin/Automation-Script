@@ -182,7 +182,104 @@ def confirm_tab_url(expected_pattern, fallback_url=None, max_wait=8.0, descripti
     return False
 
 
-def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=False, datastudio_opened=False, duplicates_opened=False):
+def _inject_js_macro(js_code, pre_clipboard_flag=None):
+    """Paste a javascript: macro into the active browser tab."""
+    if pre_clipboard_flag:
+        pyperclip.copy(pre_clipboard_flag)
+    pyperclip.copy(js_code)
+    pyautogui.hotkey('ctrl', 'l')
+    time.sleep(0.3)
+    pyautogui.write('javascript:', interval=0.015)
+    time.sleep(0.2)
+    pyautogui.hotkey('ctrl', 'v')
+    time.sleep(0.3)
+    pyautogui.press('enter')
+
+
+def _is_approve_status(status):
+    """True when the final sheet status is an approval (not reject/review/cancel)."""
+    if not status:
+        return False
+    s = status.strip()
+    return s == "Approve" or s.startswith("Approve (")
+
+
+def _check_piq_login_status():
+    """Return LOGGED_OUT:YES, LOGGED_OUT:NO, or LOGGED_OUT:UNKNOWN from PaymentIQ tab."""
+    _inject_js_macro(load_macro("piq_check_login.js"), pre_clipboard_flag="WAITING_PIQ_LOGIN")
+    time.sleep(1.2)
+    clip_val = pyperclip.paste().strip()
+    if clip_val.startswith("(function") or clip_val == "WAITING_PIQ_LOGIN":
+        time.sleep(1.0)
+        clip_val = pyperclip.paste().strip()
+    if clip_val in ("LOGGED_OUT:YES", "LOGGED_OUT:NO", "LOGGED_OUT:UNKNOWN"):
+        return clip_val
+    return "LOGGED_OUT:UNKNOWN"
+
+
+def _wait_for_piq_login(max_wait=600):
+    """Wait until PaymentIQ Backoffice is logged in. Returns True when ready."""
+    print("[PAYMENTIQ] Checking login status...")
+    warned = False
+    start_time = time.time()
+    while time.time() - start_time < max_wait:
+        status = _check_piq_login_status()
+        if status == "LOGGED_OUT:NO":
+            print("[PAYMENTIQ] Logged in. Continuing approve flow...")
+            return True
+        if not warned:
+            print("\n" + "=" * 60)
+            print("[PAYMENTIQ] Not logged in. Please log in to PaymentIQ Backoffice.")
+            print("The script will continue automatically once login is detected.")
+            print("=" * 60 + "\n")
+            warned = True
+        time.sleep(4.0)
+    print("[PAYMENTIQ] Login wait timed out after {0:.0f}s.".format(max_wait))
+    return False
+
+
+def _run_piq_approve_flow(player_email):
+    """Open PaymentIQ home, wait for login, navigate to Approve, and search by email."""
+    if not player_email or "@" not in player_email:
+        print("[PAYMENTIQ] No valid email available — skipping Approve search.")
+        return False
+
+    piq_home_url = "https://backoffice.paymentiq.io/#/home"
+    print(f"\n[PAYMENTIQ] Status is Approve — opening {piq_home_url}...")
+    webbrowser.open_new_tab(piq_home_url)
+
+    print("[PAYMENTIQ] Waiting 8 seconds for PaymentIQ to load...")
+    time.sleep(8.0)
+    confirm_tab_url("backoffice.paymentiq.io", fallback_url=piq_home_url, max_wait=10.0, description="PaymentIQ Backoffice")
+
+    if not _wait_for_piq_login():
+        print("[PAYMENTIQ] Could not confirm login. Skipping Approve search.")
+        return False
+
+    print(f"[PAYMENTIQ] Navigating to Approve tab and searching for '{player_email}'...")
+    js_approve = load_macro("piq_approve_search.js", TARGET_EMAIL=player_email.strip().lower())
+    _inject_js_macro(js_approve, pre_clipboard_flag="WAITING_PIQ_SEARCH")
+
+    search_ok = False
+    for _ in range(12):
+        time.sleep(1.0)
+        clip_val = pyperclip.paste().strip()
+        if clip_val.startswith("PIQ_SEARCH_OK:"):
+            search_ok = True
+            print(f"[PAYMENTIQ] Approve search submitted for '{player_email}'.")
+            break
+        if clip_val.startswith("PIQ_SEARCH_FAIL:"):
+            print(f"[PAYMENTIQ] Approve search failed: {clip_val}")
+            break
+
+    if not search_ok:
+        print("[PAYMENTIQ] Approve search may still be loading — verify results manually in the PIQ tab.")
+
+    print("[PAYMENTIQ] PIQ Approve tab left open for manual approval.")
+    return True
+
+
+def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=False, datastudio_opened=False, duplicates_opened=False, piq_opened=False):
     print("[DATASTUDIO] Closing opened auxiliary tabs to return to Playbison...")
     if sheets_opened:
         pyautogui.hotkey('ctrl', 'w')
@@ -199,7 +296,11 @@ def cleanup_tabs(sheets_opened=False, analytics_opened=False, wallet_opened=Fals
     if duplicates_opened:
         pyautogui.hotkey('ctrl', 'w')
         time.sleep(0.4)
-    
+    # Keep PaymentIQ Approve tab open — operator completes approval manually
+    if piq_opened:
+        print("[PAYMENTIQ] Keeping PaymentIQ tab active for manual approval.")
+        return
+
     # Always ensure Chrome focuses on Tab 1 (Main Playbison table)
     time.sleep(0.5)
     pyautogui.hotkey('ctrl', '1')
@@ -236,6 +337,7 @@ def main():
     wallet_opened = False
     analytics_opened = False
     sheets_opened = False
+    piq_opened = False
     true_player_name = ""
 
     print("\nINSTRUCTIONS:")
@@ -2079,6 +2181,10 @@ def main():
                         time.sleep(0.3)
                         sheets_opened = False
                         confirm_tab_url("playbison.com", fallback_url="https://api-acnt.playbison.com/platform-admin/#action:admin.payments", max_wait=4.0, description="Playbison Tab 1")
+
+                    # If approved, open PaymentIQ and search Approve queue by player email
+                    if _is_approve_status(approval_status):
+                        piq_opened = _run_piq_approve_flow(player_email)
                     
                     # Record withdrawal_id as successfully completed
                     if withdrawal_id:
@@ -2100,8 +2206,8 @@ def main():
                         except Exception as e:
                             print(f"[STATE] Error saving completed ID: {e}")
                     
-                    # Clean up tabs safely
-                    cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
+                    # Clean up tabs safely (PIQ Approve tab stays open when piq_opened)
+                    cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened, piq_opened)
                     datastudio_opened = False
                     wallet_opened = False
                     sheets_opened = False
@@ -2119,7 +2225,7 @@ def main():
         
     # Safety cleanup: ensure any remaining auxiliary tabs are closed and Chrome returns to Tab 1
     if any([sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened]):
-        cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened)
+        cleanup_tabs(sheets_opened, analytics_opened, wallet_opened, datastudio_opened, duplicates_opened, piq_opened=False)
         
     print("\n[MAIN] Script complete! Workflow finished.")
 
