@@ -46,33 +46,200 @@
     closeDatePopups(el.ownerDocument);
   }
 
+  // Redeem check: Date From = today minus 31 days (previous month), keep current HH:MM
+  // e.g. run 2026-09-19 15:16 -> "2026-08-19 15:16"
+  function getRedeemDateFromValue() {
+    let d = new Date();
+    d.setDate(d.getDate() - 31);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") +
+      " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
+  function findDateFromInput(container) {
+    if (!container) return null;
+    let root = container;
+
+    // 1) Label exactly "Date From" / "Date from"
+    let labels = Array.from(root.querySelectorAll('label, .form-label, .control-label, .col-form-label, span, div, p, strong, b, td, th'));
+    let dateLab = labels.find(el => {
+      if (el.children && el.children.length > 2) return false;
+      let t = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      return t === 'date from' || t === 'date from:' || t === 'datefrom';
+    });
+    if (dateLab) {
+      let wrap = dateLab.closest('.form-group, .mb-3, .col, [class*="col-"], .form-item, td, .x-form-item, .x-field') || dateLab.parentElement;
+      if (wrap) {
+        let inp = wrap.querySelector('input:not([type="hidden"])');
+        if (inp) return inp;
+      }
+      if (dateLab.nextElementSibling) {
+        let n = dateLab.nextElementSibling;
+        let inp = (n.tagName === 'INPUT' ? n : n.querySelector('input:not([type="hidden"])'));
+        if (inp) return inp;
+      }
+    }
+
+    // 2) Attribute / ng-model / name match
+    let inputs = Array.from(root.querySelectorAll('input:not([type="hidden"])'));
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let attr = (
+        (inp.placeholder || '') + ' ' + (inp.name || '') + ' ' + (inp.id || '') + ' ' +
+        (inp.getAttribute('ng-model') || '') + ' ' + (inp.getAttribute('formcontrolname') || '') + ' ' +
+        (inp.getAttribute('aria-label') || '')
+      ).toLowerCase();
+      if ((attr.includes('date') && attr.includes('from') && !attr.includes('to')) ||
+          attr.includes('datefrom') || attr.includes('date_from') || attr.includes('date-from')) {
+        return inp;
+      }
+    }
+
+    // 3) Parent walk — tight wrappers only
+    for (let inp of inputs) {
+      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
+      let p = inp.parentElement;
+      for (let level = 0; level < 5 && p && p !== root; level++) {
+        let labEl = p.querySelector && p.querySelector(':scope > label, :scope > .form-label, :scope > .control-label');
+        let lab = labEl ? (labEl.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim() : '';
+        if (lab === 'date from' || lab === 'date from:') return inp;
+        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (t.length < 60 && (t.includes('date from') || (t.startsWith('date') && t.includes('from'))) &&
+            !t.includes('date to') && !t.includes('registered')) {
+          let childInputs = p.querySelectorAll('input:not([type="hidden"])');
+          if (childInputs.length <= 2) return inp;
+        }
+        p = p.parentElement;
+      }
+    }
+
+    // 4) Heuristic: visible input whose current value looks like YYYY-MM-01 (page default month start)
+    let monthStart = inputs.find(inp => {
+      let v = (inp.value || '').trim();
+      return /^\d{4}-\d{2}-01(\s|$)/.test(v) && (inp.offsetWidth > 0 || inp.getBoundingClientRect().width > 0);
+    });
+    if (monthStart) return monthStart;
+
+    return null;
+  }
+
+  function setDateFromOneMonthAgo(inputEl) {
+    if (!inputEl) return "";
+    let val = getRedeemDateFromValue();
+    let doc = inputEl.ownerDocument || document;
+
+    try { inputEl.focus(); } catch (e) {}
+    try { inputEl.click(); } catch (e) {}
+
+    // Clear first so Angular/datepicker does not keep 2026-09-01
+    try {
+      let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      if (setter) setter.call(inputEl, '');
+      else inputEl.value = '';
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (e) {}
+
+    try {
+      let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      if (setter) setter.call(inputEl, val);
+      else inputEl.value = val;
+    } catch (e) {
+      inputEl.value = val;
+    }
+    try { inputEl.setAttribute('value', val); } catch (e) {}
+
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    inputEl.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', keyCode: 13 }));
+
+    // AngularJS ngModel (Playbison admin often uses this)
+    try {
+      if (window.angular) {
+        let ngEl = window.angular.element(inputEl);
+        let ngModel = ngEl.controller && ngEl.controller('ngModel');
+        if (ngModel) {
+          ngModel.$setViewValue(val);
+          ngModel.$render();
+        }
+        ngEl.triggerHandler('input');
+        ngEl.triggerHandler('change');
+      }
+    } catch (e) {}
+
+    // jQuery / bootstrap-datetimepicker / flatpickr hooks
+    try {
+      if (window.jQuery) {
+        let $ = window.jQuery;
+        $(inputEl).val(val).trigger('input').trigger('change').trigger('blur');
+        if ($(inputEl).data('DateTimePicker')) $(inputEl).data('DateTimePicker').date(val);
+        if ($(inputEl).data('datepicker')) $(inputEl).datepicker('update', val);
+      }
+    } catch (e) {}
+
+    // Do NOT Escape here — that can cancel the edit and restore 2026-09-01
+    try {
+      let popups = doc.querySelectorAll('.datepicker, .datetimepicker, .bootstrap-datetimepicker-widget, .flatpickr-calendar, .ui-datepicker');
+      popups.forEach(p => { try { p.style.display = 'none'; } catch (e) {} });
+    } catch (e) {}
+
+    // Final verify — if still month-start default (YYYY-MM-01), force again
+    let cur = (inputEl.value || '').trim();
+    let wantDay = val.slice(0, 10);
+    if (!cur || /^\d{4}-\d{2}-01(\s|$)/.test(cur) || cur.indexOf(wantDay) !== 0) {
+      inputEl.value = val;
+      try {
+        let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        if (setter) setter.call(inputEl, val);
+      } catch (e) {}
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return val;
+  }
+
   function setSelectVal(el, optionIndexOrVal) {
-    if (!el) return;
+    if (!el) return false;
     try { el.focus(); } catch (e) {}
+    let matched = false;
     if (typeof optionIndexOrVal === 'number') {
       el.selectedIndex = optionIndexOrVal;
       if (el.options && el.options[optionIndexOrVal]) {
         let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
         if (setter) setter.call(el, el.options[optionIndexOrVal].value);
         else el.value = el.options[optionIndexOrVal].value;
+        matched = true;
       }
     } else {
-      let opt = Array.from(el.options || []).find(o => o.value === optionIndexOrVal || o.textContent.toLowerCase().trim().includes(optionIndexOrVal.toLowerCase()));
+      let needle = String(optionIndexOrVal || '').toLowerCase().trim();
+      let opts = Array.from(el.options || []);
+      let opt = opts.find(o => {
+        let t = ((o.textContent || '') + ' ' + (o.value || '')).toLowerCase().trim();
+        return t === needle || t.includes(needle);
+      });
+      // Prefer "Redeem the bonuses" style match (redeem + bonus)
+      if (!opt && needle.includes('redeem')) {
+        opt = opts.find(o => {
+          let t = ((o.textContent || '') + ' ' + (o.value || '')).toLowerCase();
+          return t.includes('redeem') && t.includes('bonus');
+        }) || opts.find(o => ((o.textContent || '') + ' ' + (o.value || '')).toLowerCase().includes('redeem'));
+      }
       if (opt) {
         el.selectedIndex = opt.index;
         let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
         if (setter) setter.call(el, opt.value);
         else el.value = opt.value;
-      } else {
+        matched = true;
+      } else if (needle === '' || needle === '0' || needle === 'all') {
         el.selectedIndex = 0;
         let setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
         if (setter && el.options && el.options.length > 0) setter.call(el, el.options[0].value);
         else el.value = '';
+        matched = true;
       }
     }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
+    return matched;
   }
 
   function getActiveModalContainer(tTab, doc) {
@@ -87,31 +254,6 @@
       }
     }
     return doc;
-  }
-
-  function findDateFromInput(container) {
-    if (!container) return null;
-    let inputs = Array.from(container.querySelectorAll('input'));
-    for (let inp of inputs) {
-      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
-      let attr = ((inp.placeholder || '') + ' ' + (inp.name || '') + ' ' + (inp.id || '') + ' ' + (inp.getAttribute('ng-model') || '')).toLowerCase();
-      if ((attr.includes('date') && attr.includes('from')) || attr.includes('datefrom') || attr.includes('date_from')) {
-        return inp;
-      }
-    }
-    for (let inp of inputs) {
-      if (inp.offsetWidth === 0 && inp.getBoundingClientRect().width === 0) continue;
-      let p = inp.parentElement;
-      for (let level = 0; level < 5 && p && p !== container; level++) {
-        let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
-        if ((t.includes('date from') || (t.includes('date') && t.includes('from'))) && !t.includes('date to') && !t.includes('registered')) {
-          let childInputs = p.querySelectorAll('input');
-          if (childInputs.length <= 2) return inp;
-        }
-        p = p.parentElement;
-      }
-    }
-    return null;
   }
 
   function findDateToInput(container) {
@@ -233,22 +375,140 @@
     return null;
   }
 
+  function getFieldLabelText(wrap) {
+    if (!wrap) return '';
+    let lab = wrap.querySelector('label, .form-label, .control-label, .col-form-label');
+    if (lab) return (lab.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    // First text node / small text sibling
+    let first = Array.from(wrap.querySelectorAll('span, div, p, strong, b')).find(el => {
+      let t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      return t.length > 0 && t.length < 40 && el.children.length === 0;
+    });
+    return first ? (first.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim() : '';
+  }
+
   function findTypeSelect(container) {
     if (!container) return null;
+    // Include HIDDEN selects (Select2/Chosen/Bootstrap-select often hide the native <select>)
     let selects = Array.from(container.querySelectorAll('select'));
+
+    // 1) Label exactly "Type" (not Product Type)
     for (let sel of selects) {
-      if (sel.offsetWidth === 0 && sel.getBoundingClientRect().width === 0) continue;
+      let wrap = sel.closest('.form-group, .mb-3, .col, [class*="col-"], .form-item, .form-floating') || sel.parentElement;
+      let lab = getFieldLabelText(wrap);
+      if (lab === 'type' || lab === 'type:') return sel;
+    }
+
+    // 2) Parent walk — still allow zero-size selects
+    for (let sel of selects) {
       let p = sel.parentElement;
-      for (let level = 0; level < 5 && p && p !== container; level++) {
+      for (let level = 0; level < 6 && p && p !== container; level++) {
+        let labEl = p.querySelector && p.querySelector(':scope > label, :scope > .form-label, :scope > .control-label');
+        let lab = labEl ? (labEl.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim() : '';
+        if (lab === 'type' || lab === 'type:') return sel;
         let t = (p.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
-        if ((t.includes('type') && !t.includes('product')) || t === 'type') {
+        // Keep this check tight: short wrappers only (avoid whole Filters panel with Product Type)
+        if (t.length < 80 && ((t.includes('type') && !t.includes('product')) || t === 'type')) {
           let childSelects = p.querySelectorAll('select');
           if (childSelects.length <= 2) return sel;
         }
         p = p.parentElement;
       }
     }
+
+    // 3) Select that actually has a "Redeem the bonuses" option
+    for (let sel of selects) {
+      let hasRedeem = Array.from(sel.options || []).some(o => {
+        let t = ((o.textContent || '') + ' ' + (o.value || '')).toLowerCase();
+        return t.includes('redeem') && t.includes('bonus');
+      });
+      if (hasRedeem) return sel;
+    }
     return null;
+  }
+
+  function getTypeDisplayValue(container) {
+    let sel = findTypeSelect(container);
+    if (sel) {
+      let opt = sel.options && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+      let txt = ((opt && opt.textContent) || sel.value || '').trim();
+      if (txt) return txt;
+    }
+    // Visible Select2 / Chosen / bootstrap-select display text near Type label
+    let labels = Array.from((container || document).querySelectorAll('label, .form-label, .control-label'));
+    let typeLab = labels.find(l => {
+      let t = (l.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return t === 'type' || t === 'type:';
+    });
+    if (typeLab) {
+      let wrap = typeLab.closest('.form-group, .mb-3, .col, [class*="col-"]') || typeLab.parentElement;
+      if (wrap) {
+        let chosen = wrap.querySelector('.select2-selection__rendered, .chosen-single span, .filter-option-inner-inner, .dropdown-toggle, .bootstrap-select .filter-option');
+        if (chosen) return (chosen.textContent || '').trim();
+      }
+    }
+    return '';
+  }
+
+  function isRedeemTypeSet(container) {
+    let v = getTypeDisplayValue(container).toLowerCase();
+    return v.includes('redeem') && v.includes('bonus');
+  }
+
+  function pickRedeemOptionFromOpenMenus(doc) {
+    let root = doc || document;
+    let items = Array.from(root.querySelectorAll(
+      'select option, .dropdown-menu li, .dropdown-menu a, .dropdown-item, [role="option"], .select2-results__option, .chosen-results li, .x-boundlist-item'
+    ));
+    let match = items.find(el => {
+      let t = (el.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return t.includes('redeem') && t.includes('bonus') && t.length < 60;
+    });
+    if (!match) return false;
+    if (match.tagName && match.tagName.toLowerCase() === 'option' && match.parentElement) {
+      return setSelectVal(match.parentElement, 'redeem the bonuses');
+    }
+    simClick(match);
+    return true;
+  }
+
+  function setTypeToRedeem(container) {
+    if (!container) container = document;
+    let sel = findTypeSelect(container);
+    if (sel && setSelectVal(sel, 'redeem the bonuses')) {
+      // Sync common custom select UIs
+      try {
+        if (window.jQuery) {
+          let $ = window.jQuery;
+          if ($(sel).data('select2')) $(sel).trigger('change');
+          if ($(sel).data('chosen')) { $(sel).trigger('chosen:updated'); $(sel).trigger('change'); }
+          if (typeof $(sel).selectpicker === 'function') $(sel).selectpicker('refresh');
+        }
+      } catch (e) {}
+      if (isRedeemTypeSet(container)) return true;
+    }
+
+    // Click visible Type control and pick "Redeem the bonuses"
+    let labels = Array.from(container.querySelectorAll('label, .form-label, .control-label'));
+    let typeLab = labels.find(l => {
+      let t = (l.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return t === 'type' || t === 'type:';
+    });
+    let clickTarget = null;
+    if (typeLab) {
+      let wrap = typeLab.closest('.form-group, .mb-3, .col, [class*="col-"]') || typeLab.parentElement;
+      clickTarget = wrap && wrap.querySelector(
+        '.select2-selection, .chosen-single, .dropdown-toggle, .bootstrap-select button, select, [role="combobox"], input'
+      );
+    }
+    if (!clickTarget && sel) {
+      let wrap = sel.closest('.form-group, .mb-3, .bootstrap-select, .chosen-container, .select2') || sel.parentElement;
+      clickTarget = (wrap && wrap.querySelector('.select2-selection, .chosen-single, .dropdown-toggle, button')) || sel;
+    }
+    if (clickTarget) simClick(clickTarget);
+    pickRedeemOptionFromOpenMenus(container.ownerDocument || document);
+    if (sel) setSelectVal(sel, 'redeem the bonuses');
+    return isRedeemTypeSet(container);
   }
 
   function findSearchButton(container, inputEl) {
@@ -712,16 +972,18 @@
       }
 
       if (dateInput) {
-        let d = new Date(); d.setMonth(d.getMonth() - 1);
-        let val = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
-        setVal(dateInput, val);
+        setDateFromOneMonthAgo(dateInput);
+        // Re-apply — some datepickers reset to month-start (e.g. 2026-09-01) on first blur
+        setTimeout(() => { setDateFromOneMonthAgo(dateInput); }, 150);
       } else {
         copyToClipboard("TRANS_RESULT:NO_DATE_INPUT");
         return;
       }
 
-      if (typeSelect) {
-        setSelectVal(typeSelect, 'redeem the bonus');
+      // Set Type = "Redeem the bonuses" (must stick before Search)
+      setTypeToRedeem(modalContainer);
+      if (!isRedeemTypeSet(modalContainer)) {
+        setTypeToRedeem(targetDoc || document);
       }
       if (amtInput) {
         setVal(amtInput, '');
@@ -731,76 +993,112 @@
 
       setTimeout(() => {
         closeDatePopups(targetDoc || document);
-        if (searchBtn) simClick(searchBtn);
 
-        // Wait 4.5 seconds for Redeem the bonuses search results to load
+        // Retry Type if still empty, then Search
+        if (!isRedeemTypeSet(modalContainer)) {
+          setTypeToRedeem(modalContainer);
+          pickRedeemOptionFromOpenMenus(targetDoc || document);
+        }
+
         setTimeout(() => {
-          let freshDoc = getFrames()[0];
-          let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
-          let blankCheck = hasBlankInResults(freshModal);
-          let blankFound = blankCheck.found;
-          let blankDate = blankCheck.date;
-
-          if (blankFound) {
-            let userCurr = "###TCURR###".toUpperCase();
-            let searchAmt = '-8.01';
-            if (userCurr.includes('EUR')) searchAmt = '-2.01';
-            else if (userCurr.includes('HUF')) searchAmt = '-800.01';
-            else if (userCurr.includes('USD')) searchAmt = '-2.01';
-
-            let freshTypeSelect = findTypeSelect(freshModal);
-            let freshAmtInput = findAmountInToInput(freshModal);
-            let freshAmtFromInput = findAmountInFromInput(freshModal);
-            let freshDateInput = findDateFromInput(freshModal);
-            let freshDateToInput = findDateToInput(freshModal);
-            let freshSearchBtn = findSearchButton(freshModal, freshAmtInput || freshTypeSelect);
-
-            if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
-            if (freshAmtInput) setVal(freshAmtInput, searchAmt);
-            if (freshAmtFromInput) setVal(freshAmtFromInput, '-10000');
-            
-            if (freshDateInput) {
-              let d = new Date(); d.setMonth(d.getMonth() - 1);
-              let newVal = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " 00:00";
-              setVal(freshDateInput, newVal);
-            }
-            if (freshDateToInput) {
-              let now = new Date();
-              now.setDate(now.getDate() + 1);
-              let toVal = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " 23:59";
-              setVal(freshDateToInput, toVal);
-            }
-
-            closeDatePopups(freshDoc || document);
-
-            setTimeout(() => {
-              closeDatePopups(freshDoc || document);
-              if (freshSearchBtn) simClick(freshSearchBtn);
-              
-              // Wait 4.5 seconds for Stack search results to load
-              setTimeout(() => {
-                let liveDoc = getFrames()[0];
-                let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
-                
-                let totalPages = getTotalPages(liveModal);
-                if (totalPages > 50) {
-                  let stackDates = getStackDatesFromPage(liveModal);
-                  copyToClipboard("TRANS_RESULT:EXCEEDS_5_PAGES|" + stackDates.join(','));
-                  return;
-                }
-                
-                computeAllPagesStack(liveModal, function(stackResult) {
-                  let resText = stackResult || "NO_STACK";
-                  let dateStr = blankDate ? `|STACK_DATE:${blankDate}` : "";
-                  copyToClipboard("TRANS_RESULT:" + resText + dateStr);
-                });
-              }, 4500);
-            }, 600);
-          } else {
-            copyToClipboard("TRANS_RESULT:AUTOMATIC");
+          closeDatePopups(targetDoc || document);
+          if (!isRedeemTypeSet(modalContainer)) {
+            setTypeToRedeem(modalContainer);
           }
-        }, 4500);
 
+          // Ensure Date From = today - 31 days (previous month) BEFORE Search
+          let expectedDate = getRedeemDateFromValue();
+          let liveDate = findDateFromInput(modalContainer) || findDateFromInput(targetDoc || document) || dateInput;
+          if (liveDate) {
+            setDateFromOneMonthAgo(liveDate);
+            // If still stuck on month-start default, force once more
+            let curVal = (liveDate.value || '').trim();
+            if (!curVal.startsWith(expectedDate.slice(0, 10))) {
+              liveDate.value = expectedDate;
+              try {
+                let setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                if (setter) setter.call(liveDate, expectedDate);
+              } catch (e) {}
+              liveDate.dispatchEvent(new Event('input', { bubbles: true }));
+              liveDate.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+
+          setTimeout(() => {
+            // Final date force right before Search click
+            let finalDate = findDateFromInput(modalContainer) || liveDate;
+            if (finalDate) setDateFromOneMonthAgo(finalDate);
+
+            let liveSearch = findSearchButton(modalContainer, finalDate || findTypeSelect(modalContainer)) || searchBtn;
+            if (liveSearch) simClick(liveSearch);
+
+            // Wait 4.5 seconds for Redeem the bonuses search results to load
+            setTimeout(() => {
+            let freshDoc = getFrames()[0];
+            let freshModal = getActiveModalContainer(tTab, freshDoc) || freshDoc;
+            let blankCheck = hasBlankInResults(freshModal);
+            let blankFound = blankCheck.found;
+            let blankDate = blankCheck.date;
+
+            if (blankFound) {
+              let userCurr = "###TCURR###".toUpperCase();
+              let searchAmt = '-8.01';
+              if (userCurr.includes('EUR')) searchAmt = '-2.01';
+              else if (userCurr.includes('HUF')) searchAmt = '-800.01';
+              else if (userCurr.includes('USD')) searchAmt = '-2.01';
+
+              let freshTypeSelect = findTypeSelect(freshModal);
+              let freshAmtInput = findAmountInToInput(freshModal);
+              let freshAmtFromInput = findAmountInFromInput(freshModal);
+              let freshDateInput = findDateFromInput(freshModal);
+              let freshDateToInput = findDateToInput(freshModal);
+              let freshSearchBtn = findSearchButton(freshModal, freshAmtInput || freshTypeSelect);
+
+              if (freshTypeSelect) setSelectVal(freshTypeSelect, 0);
+              if (freshAmtInput) setVal(freshAmtInput, searchAmt);
+              if (freshAmtFromInput) setVal(freshAmtFromInput, '-10000');
+              
+              if (freshDateInput) {
+                setDateFromOneMonthAgo(freshDateInput);
+              }
+              if (freshDateToInput) {
+                let now = new Date();
+                now.setDate(now.getDate() + 1);
+                let toVal = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " 23:59";
+                setVal(freshDateToInput, toVal);
+              }
+
+              closeDatePopups(freshDoc || document);
+
+              setTimeout(() => {
+                closeDatePopups(freshDoc || document);
+                if (freshSearchBtn) simClick(freshSearchBtn);
+                
+                // Wait 4.5 seconds for Stack search results to load
+                setTimeout(() => {
+                  let liveDoc = getFrames()[0];
+                  let liveModal = getActiveModalContainer(tTab, liveDoc) || liveDoc;
+                  
+                  let totalPages = getTotalPages(liveModal);
+                  if (totalPages > 50) {
+                    let stackDates = getStackDatesFromPage(liveModal);
+                    copyToClipboard("TRANS_RESULT:EXCEEDS_5_PAGES|" + stackDates.join(','));
+                    return;
+                  }
+                  
+                  computeAllPagesStack(liveModal, function(stackResult) {
+                    let resText = stackResult || "NO_STACK";
+                    let dateStr = blankDate ? `|STACK_DATE:${blankDate}` : "";
+                    copyToClipboard("TRANS_RESULT:" + resText + dateStr);
+                  });
+                }, 4500);
+              }, 600);
+            } else {
+              copyToClipboard("TRANS_RESULT:AUTOMATIC");
+            }
+            }, 4500);
+          }, 400);
+        }, 700);
       }, 800);
 
     }, 2000);

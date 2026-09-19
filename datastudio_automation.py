@@ -197,6 +197,205 @@ def _inject_js_macro(js_code, pre_clipboard_flag=None):
     pyautogui.press('enter')
 
 
+def _ymd_from_any(date_str: str) -> str:
+    """Extract YYYY-MM-DD from a date/datetime string."""
+    if not date_str:
+        return ""
+    m = re.search(r"\b(20\d\d-\d\d-\d\d)\b", str(date_str).replace("T", " "))
+    return m.group(1) if m else ""
+
+
+def _amount_to_pln(amount_str, currency="PLN") -> float:
+    """Convert amount string to PLN float (best-effort)."""
+    try:
+        clean = re.sub(r"[^\d.\-]", "", str(amount_str or "").replace(",", ".")).strip()
+        if not clean:
+            return 0.0
+        amt = float(clean)
+    except ValueError:
+        return 0.0
+    curr = (currency or "PLN").strip().upper()
+    if curr == "PLN" or not curr:
+        return abs(amt)
+    pln_str, _ = convert_to_pln(str(abs(amt)), curr)
+    try:
+        return float(re.sub(r"[^\d.]", "", str(pln_str).replace(",", ".")) or 0)
+    except ValueError:
+        return abs(amt)
+
+
+def _needs_real_fund_check(
+    val_in_pln: float,
+    id_date: str = "",
+    prev_with_date: str = "",
+    prev_with_pln: float = 0.0,
+    same_day_other_pln: float = 0.0,
+    same_day_count: int = 0,
+) -> bool:
+    """
+    Trigger Real Fund WIN/STAKE lookup when:
+      - current withdrawal > 7000 PLN, OR
+      - same-day multiple withdrawals (pending+completed) totaling > 3000 PLN, OR
+      - same-day prior completed withdrawal and (current+prev) > 3000 / current >= 3000
+    """
+    if val_in_pln > 7000.0:
+        return True
+
+    # Prefer sum of ALL other same-day WDs from payment log (includes Pending)
+    if same_day_other_pln > 0 and (val_in_pln + same_day_other_pln) > 3000.0:
+        return True
+    if same_day_count >= 2 and (val_in_pln + max(same_day_other_pln, 0.0)) > 3000.0:
+        return True
+
+    # Fallback: single previous completed withdrawal on same calendar day
+    cur_ymd = _ymd_from_any(id_date)
+    prev_ymd = _ymd_from_any(prev_with_date)
+    same_day = bool(cur_ymd and prev_ymd and cur_ymd == prev_ymd)
+    if not same_day:
+        return False
+    if (val_in_pln + max(prev_with_pln, 0.0)) > 3000.0:
+        return True
+    if val_in_pln >= 3000.0 and prev_with_pln > 0:
+        return True
+    return False
+
+
+def _run_real_fund_check():
+    """
+    High-value WIN/STAKE lookup via SYNC javascript: macros only.
+
+    Chrome blocks document.execCommand('copy') inside setTimeout (no user gesture),
+    so every result must be copied in the same turn as the inject. Python sleeps
+    between Search and Read instead of relying on page timers.
+    """
+    print("\n[REAL FUND] High-value withdrawal detected — checking Transactions for WIN/STAKE...")
+
+    def _clip_preview(clip):
+        preview = (clip or "")[:60].replace("\n", " ") or "empty"
+        if preview.startswith("(function") or preview.startswith("javascript:"):
+            return "(js payload)"
+        return preview
+
+    def _wait_clip(prefixes, seconds=12, label="", flush=True):
+        deadline = time.time() + seconds
+        last_note = 0
+        flushed = False
+        while time.time() < deadline:
+            time.sleep(0.5)
+            clip = (pyperclip.paste() or "").strip()
+            if not any(clip.startswith(p) for p in prefixes):
+                if flush and not flushed:
+                    # Re-copy under a fresh user gesture if page stored __RF_STATUS__
+                    try:
+                        _inject_js_macro(load_macro("ds_rf_flush_clip.js"))
+                        flushed = True
+                        time.sleep(0.4)
+                        clip = (pyperclip.paste() or "").strip()
+                    except Exception:
+                        pass
+                pyautogui.hotkey('ctrl', 'c')
+                time.sleep(0.12)
+                clip = (pyperclip.paste() or "").strip()
+            for p in prefixes:
+                if clip.startswith(p):
+                    return clip
+            now = time.time()
+            if label and now - last_note >= 2.5:
+                last_note = now
+                print(f"[REAL FUND] waiting {label}... ({_clip_preview(clip)})")
+        return ""
+
+    # --- Step 1: open Transactions ---
+    print("[REAL FUND] Step 1/4: Open Transactions tab...")
+    _inject_js_macro(load_macro("ds_rf_open_transactions.js"))
+    clip = _wait_clip(["REAL_FUND:TAB_OK", "REAL_FUND:FAIL"], seconds=6, label="tab")
+    if clip.startswith("REAL_FUND:FAIL"):
+        print(f"[REAL FUND] Could not open Transactions ({clip}).")
+        return "Real fund: CHECK FAILED (NO_TRANSACTIONS_TAB)"
+    print("[REAL FUND] Waiting for Transactions filters to render...")
+    time.sleep(4.0)
+
+    # --- Step 2a: set Amount From=5000 + Date From=31d, Search ---
+    print("[REAL FUND] Step 2/4: Set Amount From=5000 + Date From=31d and Search...")
+    for attempt in range(2):
+        _inject_js_macro(load_macro("ds_rf_search_wins.js"))
+        clip = _wait_clip(
+            ["REAL_FUND:SEARCHED", "REAL_FUND:NEED_TAB", "REAL_FUND:FAIL"],
+            seconds=8,
+            label="search-wins",
+        )
+        if clip.startswith("REAL_FUND:NEED_TAB"):
+            print("[REAL FUND] Transactions tab was not ready — retrying search after wait...")
+            time.sleep(3.5)
+            continue
+        break
+    if clip.startswith("REAL_FUND:FAIL"):
+        print(f"[REAL FUND] WIN filter search failed ({clip}).")
+        return f"Real fund: CHECK FAILED ({clip.replace('REAL_FUND:FAIL:', '')})"
+    if not clip.startswith("REAL_FUND:SEARCHED"):
+        # Proceed anyway — filters may still have been set even if clipboard missed
+        print(f"[REAL FUND] Search ack missed ({_clip_preview(clip)}); waiting for table anyway...")
+    print("[REAL FUND] Waiting for WIN results table...")
+    time.sleep(5.5)
+
+    # --- Step 2b: read largest WIN >= 5000 (sync copy) ---
+    print("[REAL FUND] Step 3/4: Read largest WIN >= 5000...")
+    _inject_js_macro(load_macro("ds_rf_read_win.js"))
+    clip = _wait_clip(["REAL_FUND:WIN|", "REAL_FUND:NO_WIN", "REAL_FUND:FAIL"], seconds=10, label="read-win")
+    if clip.startswith("REAL_FUND:NO_WIN"):
+        print(f"[REAL FUND] No WIN >= 5000 found ({clip}).")
+        return "Real fund: NO WIN >= 5000"
+    if not clip.startswith("REAL_FUND:WIN|"):
+        print(f"[REAL FUND] WIN read failed ({clip or 'timeout'}).")
+        return f"Real fund: CHECK FAILED ({(clip or 'WIN_TIMEOUT').replace('REAL_FUND:FAIL:', '')})"
+
+    parts = clip.split("|")
+    win_date = parts[1] if len(parts) > 1 else ""
+    win_amt = parts[2] if len(parts) > 2 else ""
+    win_curr = parts[3] if len(parts) > 3 else "PLN"
+    win_game = parts[4] if len(parts) > 4 else "Unknown"
+    print(f"[REAL FUND] Found WIN {win_amt} {win_curr} at {win_date} ({win_game})")
+    time.sleep(0.8)
+
+    # --- Step 3a: narrow date window + Search ---
+    print("[REAL FUND] Step 4/4: Narrow date window and find STAKE below WIN...")
+    _inject_js_macro(load_macro(
+        "ds_rf_search_stake.js",
+        WIN_DATE=win_date.replace("'", ""),
+    ))
+    clip = _wait_clip(["REAL_FUND:STAKE_SEARCHED", "REAL_FUND:FAIL"], seconds=8, label="search-stake")
+    if clip.startswith("REAL_FUND:FAIL"):
+        print(f"[REAL FUND] STAKE search setup failed ({clip}).")
+        return f"Real fund:{win_date} WIN:{win_amt} {win_curr}, STAKE:?, Game:{win_game}"
+    time.sleep(5.0)
+
+    # --- Step 3b: read STAKE (sync copy) ---
+    _inject_js_macro(load_macro(
+        "ds_rf_read_stake.js",
+        WIN_DATE=win_date.replace("'", ""),
+        WIN_AMT=win_amt.replace("'", ""),
+        WIN_CURR=win_curr.replace("'", ""),
+        WIN_GAME=_escape_for_js_string(win_game),
+    ))
+    clip = _wait_clip(["REAL_FUND:OK|", "REAL_FUND:FAIL"], seconds=10, label="read-stake")
+    if not clip.startswith("REAL_FUND:OK|"):
+        print(f"[REAL FUND] STAKE read failed ({clip or 'timeout'}).")
+        return f"Real fund:{win_date} WIN:{win_amt} {win_curr}, STAKE:?, Game:{win_game}"
+
+    meta = {}
+    for chunk in clip.replace("REAL_FUND:OK|", "").split("|"):
+        if ":" in chunk:
+            k, v = chunk.split(":", 1)
+            meta[k.strip().upper()] = v.strip()
+
+    status_line = (
+        f"Real fund:{meta.get('DATE', win_date)} WIN:{meta.get('WIN', win_amt)} {meta.get('CURR', win_curr)}, "
+        f"STAKE:{meta.get('STAKE', '0.00')} {meta.get('CURR', win_curr)}, Game:{meta.get('GAME', win_game)}"
+    )
+    print(f"[REAL FUND] {status_line}")
+    return status_line
+
+
 def _is_approve_status(status):
     """True when the final sheet status is an approval (not reject/review/cancel)."""
     if not status:
@@ -1984,8 +2183,8 @@ def main():
                     pay_log_wait = 10.0
                     print(f"[PLAYBISON] Waiting {pay_log_wait} seconds for Payment Log (extended due to slow page load)...")
                 else:
-                    pay_log_wait = 6.5
-                    print(f"[PLAYBISON] Waiting {pay_log_wait} seconds for status selection + search results to load...")
+                    pay_log_wait = 11.0
+                    print(f"[PLAYBISON] Waiting {pay_log_wait} seconds for Pending+Completed status selection + search...")
                 time.sleep(pay_log_wait)
                 
                 # Extract the last deposit ID from the Payment Log
@@ -2036,6 +2235,12 @@ def main():
                 dep_val = ""           # Amount of last completed deposit
                 dep_curr = "PLN"       # Currency of last completed deposit
                 prev_with_date = ""    # Date of previous completed withdrawal
+                prev_with_val = ""     # Amount of previous completed withdrawal
+                prev_with_curr = "PLN"
+                same_day_other_val = ""  # Sum of OTHER same-day WDs (pending+completed)
+                same_day_other_curr = "PLN"
+                same_day_count = 0      # Count of same-day withdrawals including current
+                real_fund_status = ""  # High-value WIN/STAKE summary for status column
                 
                 if payment_log_val.startswith("DEP_OP:"):
                     dep_part = payment_log_val.replace("DEP_OP:", "")
@@ -2069,6 +2274,19 @@ def main():
                                     dep_curr = field.replace("DEP_CURR:", "").strip() or dep_curr
                                 elif field.startswith("PREV_WITH_DATE:"):
                                     prev_with_date = field.replace("PREV_WITH_DATE:", "").strip()
+                                elif field.startswith("PREV_WITH_VAL:"):
+                                    prev_with_val = field.replace("PREV_WITH_VAL:", "").strip()
+                                elif field.startswith("PREV_WITH_CURR:"):
+                                    prev_with_curr = field.replace("PREV_WITH_CURR:", "").strip() or prev_with_curr
+                                elif field.startswith("SAME_DAY_OTHER_VAL:"):
+                                    same_day_other_val = field.replace("SAME_DAY_OTHER_VAL:", "").strip()
+                                elif field.startswith("SAME_DAY_OTHER_CURR:"):
+                                    same_day_other_curr = field.replace("SAME_DAY_OTHER_CURR:", "").strip() or same_day_other_curr
+                                elif field.startswith("SAME_DAY_COUNT:"):
+                                    try:
+                                        same_day_count = int(field.replace("SAME_DAY_COUNT:", "").strip() or "0")
+                                    except ValueError:
+                                        same_day_count = 0
                                 elif field.startswith("WITH_ID:"):
                                     w_id_log = field.replace("WITH_ID:", "").strip()
                                     if w_id_log and (not withdrawal_id or withdrawal_id == player_id or len(str(withdrawal_id)) < 7):
@@ -2127,6 +2345,38 @@ def main():
                     print(f"[PLAYBISON] Extracted Last Deposit Operator: {last_deposit_op} | Withdrawal Operator: {withdrawal_op}")
                 else:
                     print(f"[PLAYBISON] Could not find a completed DEPOSIT row in the Payment Log.")
+
+                # --- Real Fund check (high-value / same-day multi withdrawals) ---
+                # Must run while wallet tab is still open
+                try:
+                    _curr_upper = (t_curr or "PLN").strip().upper()
+                    _wd_pln = _amount_to_pln(w_value, _curr_upper)
+                    _prev_pln = _amount_to_pln(prev_with_val, prev_with_curr or "PLN")
+                    _same_other_pln = _amount_to_pln(same_day_other_val, same_day_other_curr or _curr_upper)
+                    _wd_date = id_date or ""
+                    _day_total = _wd_pln + max(_same_other_pln, 0.0)
+                    if _needs_real_fund_check(
+                        _wd_pln,
+                        _wd_date,
+                        prev_with_date,
+                        _prev_pln,
+                        same_day_other_pln=_same_other_pln,
+                        same_day_count=same_day_count,
+                    ):
+                        print(
+                            f"[REAL FUND] Trigger: wd={_wd_pln:.2f} PLN | same_day_other={_same_other_pln:.2f} PLN "
+                            f"| day_total={_day_total:.2f} PLN | same_day_count={same_day_count} "
+                            f"| wd_date={_ymd_from_any(_wd_date)}"
+                        )
+                        real_fund_status = _run_real_fund_check()
+                    else:
+                        print(
+                            f"[REAL FUND] Skipped (wd={_wd_pln:.2f} PLN, same_day_other={_same_other_pln:.2f} PLN, "
+                            f"count={same_day_count}, day_total={_day_total:.2f})."
+                        )
+                except Exception as e:
+                    print(f"[REAL FUND] Error during check: {e}")
+                    real_fund_status = "Real fund: CHECK FAILED"
                 
                 # Use the true player_id extracted from the wallet page or fallback to player_id
                 extracted_id = true_player_id or player_id or ""
@@ -2377,6 +2627,14 @@ def main():
                             approval_status = f"Approve ({', '.join(unique_reasons)})"
                         else:
                             approval_status = "Approve"
+
+                    # Append Real Fund WIN/STAKE info (informational — does not block Approve by itself)
+                    if real_fund_status:
+                        if approval_status:
+                            approval_status = f"{approval_status} / {real_fund_status}"
+                        else:
+                            approval_status = real_fund_status
+                        print(f"[REAL FUND] Appended to status: {real_fund_status}")
                         
                     # Determine best name to use, rejecting bogus field labels like 'email'
                     name_to_use = ""

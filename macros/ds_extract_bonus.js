@@ -17,21 +17,17 @@
       if (!ta) {
         ta = document.createElement('textarea');
         ta.id = '__bonus_result_holder__';
-        ta.style.position = 'fixed';
-        ta.style.top = '10px';
-        ta.style.left = '10px';
-        ta.style.zIndex = '999999';
-        ta.style.width = '300px';
-        ta.style.height = '60px';
-        ta.style.backgroundColor = '#ffffcc';
-        ta.style.border = '2px solid #333';
+        ta.setAttribute('readonly', 'readonly');
+        // Must stay invisible — a yellow debug box was landing on the wrong Chrome tab
+        ta.style.cssText = 'position:fixed;top:0;left:0;width:2px;height:2px;opacity:0.01;z-index:1;border:0;padding:0;';
         document.body.appendChild(ta);
       }
       ta.value = text;
+      window.__BONUS_RESULT__ = text;
       ta.focus();
       ta.select();
-      try { document.execCommand('copy'); } catch(e){}
-      try { navigator.clipboard.writeText(text); } catch(e){}
+      try { ta.setSelectionRange(0, ta.value.length); } catch (e) {}
+      try { document.execCommand('copy'); } catch (e) {}
     } catch (e) {}
   }
 
